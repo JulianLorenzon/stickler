@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Matches the web UI's dark surface (surface-0) and accent (Stickler orange) -->
+    <color name="stickler_surface">#161819</color>
+    <color name="stickler_accent">#FF5A36</color>
+    <color name="colorPrimary">@color/stickler_accent</color>
+    <color name="colorPrimaryDark">@color/stickler_surface</color>
+    <color name="colorAccent">@color/stickler_accent</color>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+        <!-- Shown behind the WebView and in the system bar areas (edge-to-edge on Android 15+) -->
+        <item name="android:windowBackground">@color/stickler_surface</item>
+        <item name="android:statusBarColor">@color/stickler_surface</item>
+        <item name="android:navigationBarColor">@color/stickler_surface</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
+    </style>
+
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <!-- Android 12+: system splash with the launcher icon on the dark surface -->
+        <item name="windowSplashScreenBackground">@color/stickler_surface</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+        <!-- Older Android versions -->
+        <item name="android:background">@drawable/splash</item>
+    </style>
+</resources>

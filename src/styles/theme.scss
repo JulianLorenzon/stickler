@@ -1,0 +1,212 @@
+// Stickler dark theme
+// Pure CSS custom property overrides applied after Bootstrap loads.
+
+// ── Design tokens ──────────────────────────────────────────────
+
+:root {
+  // Surfaces (cool neutral darks)
+  --surface-0: #161819;
+  --surface-1: #1c1e20;
+  --surface-2: #232628;
+  --surface-3: #2a2d30;
+
+  // Text
+  --ink-primary: #e4e7eb;
+  --ink-secondary: #949ba4;
+  --ink-tertiary: #5d6670;
+  --ink-muted: #3a4048;
+
+  // Accent (Stickler orange). Text on it uses --accent-ink: white on this orange is only 3:1
+  --accent: #ff5a36;
+  --accent-hover: #ff7352;
+  --accent-subtle: rgba(255, 90, 54, 0.12);
+  --accent-rgb: 255, 90, 54;
+  --accent-ink: #161819;
+
+  // Functional (print-start indicator)
+  --mark-feed: #e85454;
+
+  // Semantic
+  --status-ok: #6bb88a;
+  --status-ok-rgb: 107, 184, 138;
+  --status-warn: #d4a24c;
+  --status-warn-rgb: 212, 162, 76;
+  --status-danger: #d45454;
+  --status-danger-rgb: 212, 84, 84;
+
+  // Borders
+  --border-standard: rgba(228, 231, 235, 0.08);
+  --border-soft: rgba(228, 231, 235, 0.05);
+  --border-emphasis: rgba(228, 231, 235, 0.14);
+  --border-focus: rgba(255, 90, 54, 0.5);
+
+  // Controls
+  --control-bg: #141617;
+  --control-border: rgba(228, 231, 235, 0.10);
+
+  // Radii
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+}
+
+// ── Bootstrap dark-mode overrides ──────────────────────────────
+
+[data-bs-theme="dark"] {
+  // Body
+  --bs-body-bg: var(--surface-0);
+  --bs-body-bg-rgb: 22, 24, 25;
+  --bs-body-color: var(--ink-primary);
+  --bs-body-color-rgb: 228, 231, 235;
+
+  // Secondary / tertiary
+  --bs-secondary-bg: var(--surface-1);
+  --bs-secondary-color: var(--ink-secondary);
+  --bs-tertiary-bg: var(--surface-2);
+  --bs-tertiary-color: var(--ink-tertiary);
+
+  // Borders
+  --bs-border-color: var(--border-standard);
+  --bs-border-color-translucent: var(--border-standard);
+
+  // Theme colors
+  --bs-primary: var(--accent);
+  --bs-primary-rgb: var(--accent-rgb);
+  --bs-danger: var(--status-danger);
+  --bs-danger-rgb: var(--status-danger-rgb);
+  --bs-success: var(--status-ok);
+  --bs-success-rgb: var(--status-ok-rgb);
+  --bs-warning: var(--status-warn);
+  --bs-warning-rgb: var(--status-warn-rgb);
+
+  // Subtle backgrounds (toasts, alerts)
+  --bs-primary-bg-subtle: var(--accent-subtle);
+  --bs-primary-text-emphasis: var(--accent);
+  --bs-danger-bg-subtle: rgba(212, 84, 84, 0.10);
+  --bs-danger-border-subtle: rgba(212, 84, 84, 0.25);
+  --bs-danger-text-emphasis: #e87070;
+  --bs-success-bg-subtle: rgba(107, 184, 138, 0.10);
+  --bs-success-border-subtle: rgba(107, 184, 138, 0.25);
+  --bs-success-text-emphasis: #85d0a4;
+  --bs-warning-bg-subtle: rgba(212, 162, 76, 0.10);
+  --bs-warning-border-subtle: rgba(212, 162, 76, 0.25);
+  --bs-warning-text-emphasis: #e0b86a;
+
+  // Links
+  --bs-link-color: var(--accent);
+  --bs-link-color-rgb: var(--accent-rgb);
+  --bs-link-hover-color: var(--accent-hover);
+
+  // Focus ring
+  --bs-focus-ring-color: var(--border-focus);
+
+  // Border radii
+  --bs-border-radius: var(--radius-sm);
+  --bs-border-radius-lg: var(--radius-md);
+  --bs-border-radius-xl: var(--radius-lg);
+}
+
+// ── Button overrides ───────────────────────────────────────────
+
+.btn-primary {
+  --bs-btn-bg: var(--accent);
+  --bs-btn-border-color: var(--accent);
+  --bs-btn-color: var(--accent-ink);
+  --bs-btn-hover-bg: var(--accent-hover);
+  --bs-btn-hover-border-color: var(--accent-hover);
+  --bs-btn-hover-color: var(--accent-ink);
+  --bs-btn-active-bg: var(--accent-hover);
+  --bs-btn-active-border-color: var(--accent-hover);
+  --bs-btn-active-color: var(--accent-ink);
+  --bs-btn-disabled-bg: var(--accent);
+  --bs-btn-disabled-border-color: var(--accent);
+  --bs-btn-disabled-color: var(--accent-ink);
+}
+
+.btn-secondary {
+  --bs-btn-bg: var(--surface-2);
+  --bs-btn-border-color: var(--border-standard);
+  --bs-btn-color: var(--ink-primary);
+  --bs-btn-hover-bg: var(--surface-3);
+  --bs-btn-hover-border-color: var(--border-emphasis);
+  --bs-btn-hover-color: var(--ink-primary);
+  --bs-btn-active-bg: var(--surface-3);
+  --bs-btn-active-border-color: var(--border-emphasis);
+  --bs-btn-active-color: var(--ink-primary);
+}
+
+.btn-danger {
+  --bs-btn-bg: var(--status-danger);
+  --bs-btn-border-color: var(--status-danger);
+  --bs-btn-hover-bg: #c04848;
+  --bs-btn-hover-border-color: #c04848;
+  --bs-btn-active-bg: #c04848;
+  --bs-btn-active-border-color: #c04848;
+}
+
+.btn-outline-secondary {
+  --bs-btn-color: var(--ink-secondary);
+  --bs-btn-border-color: var(--border-emphasis);
+  --bs-btn-hover-bg: var(--surface-2);
+  --bs-btn-hover-border-color: var(--border-emphasis);
+  --bs-btn-hover-color: var(--ink-primary);
+}
+
+.btn-light {
+  --bs-btn-bg: var(--surface-2);
+  --bs-btn-border-color: var(--border-standard);
+  --bs-btn-color: var(--ink-primary);
+  --bs-btn-hover-bg: var(--surface-3);
+  --bs-btn-hover-border-color: var(--border-emphasis);
+  --bs-btn-hover-color: var(--ink-primary);
+}
+
+// ── Form controls ──────────────────────────────────────────────
+
+.form-control,
+.form-select {
+  background-color: var(--control-bg);
+  border-color: var(--control-border);
+  color: var(--ink-primary);
+
+  &:focus {
+    background-color: var(--control-bg);
+    border-color: var(--accent);
+    color: var(--ink-primary);
+    box-shadow: 0 0 0 0.2rem var(--border-focus);
+  }
+}
+
+.input-group-text {
+  background-color: var(--surface-2);
+  border-color: var(--control-border);
+  color: var(--ink-secondary);
+}
+
+// ── Dropdowns ──────────────────────────────────────────────────
+
+.dropdown-menu {
+  --bs-dropdown-bg: var(--surface-2);
+  --bs-dropdown-border-color: var(--border-emphasis);
+  --bs-dropdown-link-color: var(--ink-primary);
+  --bs-dropdown-link-hover-bg: var(--surface-3);
+  --bs-dropdown-link-hover-color: var(--ink-primary);
+  --bs-dropdown-link-active-bg: var(--accent-subtle);
+  --bs-dropdown-link-active-color: var(--accent);
+  border-radius: var(--radius-lg);
+}
+
+// ── Modals ─────────────────────────────────────────────────────
+
+.modal-content {
+  --bs-modal-bg: var(--surface-3);
+  --bs-modal-border-color: var(--border-emphasis);
+  border-radius: var(--radius-lg);
+}
+
+// ── Progress bar ───────────────────────────────────────────────
+
+.progress {
+  --bs-progress-bg: var(--surface-1);
+  --bs-progress-bar-bg: var(--accent);
+}

@@ -1,0 +1,258 @@
+// App-wide layout primitives: toolbars, sheets, status indicators.
+// Mobile first, the same layout scales up to desktop.
+
+html,
+body {
+  overscroll-behavior: none;
+}
+
+button,
+a,
+.btn,
+.form-select,
+.form-check-input {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+// ── Toolbars ───────────────────────────────────────────────────
+
+.tool-row {
+  display: flex;
+  align-items: center;
+  justify-content: safe center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  > * {
+    flex: none;
+  }
+}
+
+.tool-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  min-width: 3.75rem;
+  height: 3.5rem;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink-primary);
+  font-size: 0.6875rem;
+  line-height: 1.15;
+  white-space: nowrap;
+  transition: background-color 0.12s;
+
+  .mdi {
+    font-size: 1.5rem;
+    vertical-align: 0;
+  }
+
+  span:not(.mdi) {
+    color: var(--ink-secondary);
+  }
+
+  &:hover {
+    background: var(--surface-2);
+  }
+
+  &:active,
+  &.show {
+    background: var(--surface-3);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    background: transparent;
+  }
+
+  &.active {
+    background: var(--accent-subtle);
+    color: var(--accent);
+
+    span:not(.mdi) {
+      color: var(--accent);
+    }
+  }
+
+  &.warn,
+  &.warn span:not(.mdi) {
+    color: var(--status-warn);
+  }
+}
+
+@media (max-width: 420px) {
+  .tool-btn {
+    min-width: 3.25rem;
+    padding: 0.25rem 0.375rem;
+  }
+}
+
+.tool-sep {
+  width: 1px;
+  height: 2rem;
+  margin: 0 0.25rem;
+  background: var(--border-standard);
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  color: var(--ink-secondary);
+
+  .mdi {
+    vertical-align: 0;
+  }
+
+  &:hover,
+  &:active,
+  &.show {
+    background: var(--surface-2);
+    color: var(--ink-primary);
+  }
+}
+
+// Object property controls are small Bootstrap buttons, give them finger-sized targets
+.props-row {
+  gap: 0.375rem;
+  padding-bottom: 0.5rem;
+
+  .btn-sm {
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+  }
+
+  .input-group-sm > .form-control,
+  .input-group-sm > .form-select,
+  .input-group-sm > .input-group-text,
+  .input-group-sm > .btn {
+    min-height: 2.5rem;
+  }
+
+  .input-group {
+    width: auto;
+    flex-wrap: nowrap;
+  }
+}
+
+// ── Status ─────────────────────────────────────────────────────
+
+.status-dot {
+  display: inline-block;
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--ink-tertiary);
+  vertical-align: 0.1em;
+
+  &.ok {
+    background: var(--status-ok);
+    box-shadow: 0 0 0 3px rgba(var(--status-ok-rgb), 0.2);
+  }
+}
+
+// ── Dropdowns & sheets ─────────────────────────────────────────
+
+.dropdown-menu {
+  max-width: calc(100vw - 1rem) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+// Big dropdown panels become bottom sheets on phones
+@media (max-width: 575.98px) {
+  .dropdown-menu.dropdown-sheet.show {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 80vh;
+    overflow-y: auto;
+    margin: 0 !important;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom: none;
+    animation: sheet-up 0.18s ease-out;
+    z-index: 1060;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px) !important;
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+// Modal variant: docked to the bottom on phones
+@media (max-width: 575.98px) {
+  .modal-dialog.modal-sheet {
+    display: flex;
+    align-items: flex-end;
+    min-height: 100%;
+    margin: 0;
+    max-width: none;
+
+    .modal-content {
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      border-bottom: none;
+      padding-bottom: env(safe-area-inset-bottom);
+      max-height: 90vh;
+    }
+  }
+
+  .modal.fade .modal-dialog.modal-sheet {
+    transform: translateY(40px);
+  }
+
+  .modal.show .modal-dialog.modal-sheet {
+    transform: none;
+  }
+}
+
+.modal-header {
+  border-bottom-color: var(--border-standard);
+}
+
+.modal-footer {
+  border-top-color: var(--border-standard);
+}
+
+// ── Form bits ──────────────────────────────────────────────────
+
+.form-range {
+  &::-webkit-slider-thumb {
+    background-color: var(--accent);
+  }
+  &::-moz-range-thumb {
+    background-color: var(--accent);
+  }
+  &::-webkit-slider-runnable-track,
+  &::-moz-range-track {
+    background-color: var(--surface-3);
+  }
+}
+
+.form-check-input:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}

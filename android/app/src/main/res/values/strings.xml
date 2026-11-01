@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Stickler</string>
+    <string name="title_activity_main">Stickler</string>
+    <string name="package_name">com.julianlorenzon.stickler</string>
+    <string name="custom_url_scheme">com.julianlorenzon.stickler</string>
+</resources>

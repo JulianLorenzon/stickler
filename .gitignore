@@ -1,0 +1,18 @@
+/node_modules
+/dist
+/.vscode
+.idea
+
+# Local notes, not part of the repo
+/notes
+CLAUDE.md
+
+# Signing keys never go in the repo
+*.jks
+*.keystore
+
+# Tool output
+/tools/screenshots/out
+/tools/scan-test/out
+/tools/dot-gain/bundle.mjs
+*:Zone.Identifier

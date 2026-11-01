@@ -1,0 +1,44 @@
+@import "bootstrap/scss/bootstrap-utilities";
+@import "bootstrap/scss/reboot";
+@import "bootstrap/scss/type";
+@import "bootstrap/scss/containers";
+@import "bootstrap/scss/grid";
+@import "bootstrap/scss/buttons";
+@import "bootstrap/scss/button-group";
+@import "bootstrap/scss/forms";
+@import "bootstrap/scss/dropdown";
+@import "bootstrap/scss/modal";
+@import "bootstrap/scss/close";
+@import "bootstrap/scss/progress";
+@import "bootstrap/scss/alert";
+@import "bootstrap/scss/spinners";
+@import "bootstrap/scss/transitions";
+@import "theme";
+@import "layout";
+@import "font";
+
+body {
+  font-family: "Noto Sans Variable", sans-serif;
+}
+
+.toastify.toast-danger {
+  background: var(--bs-danger-bg-subtle);
+  border: 1px solid var(--bs-danger-border-subtle);
+  color: var(--bs-danger-text-emphasis);
+}
+
+.toastify.toast-info {
+  background: var(--bs-success-bg-subtle);
+  border: 1px solid var(--bs-success-border-subtle);
+  color: var(--bs-success-text-emphasis);
+}
+
+.cursor-help {
+  cursor: help;
+}
+.toastify {
+  max-width: calc(100vw - 2rem);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font-size: 0.875rem;
+}

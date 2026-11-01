@@ -1,0 +1,645 @@
+<script lang="ts">
+  import Dropdown from "bootstrap/js/dist/dropdown";
+  import {
+    LabelPresetSchema,
+    type LabelPreset,
+    type LabelProps,
+    type LabelShape,
+    type LabelSplit,
+    type MirrorType,
+    type TailPosition,
+  } from "$/types";
+  import { printerMeta } from "$/stores";
+  import { tr } from "$/utils/i18n";
+  import { DOTS_PER_MM, D11S_ROLLS, withPrintStartMargin } from "$/defaults";
+  import { onMount } from "svelte";
+  import { LocalStoragePersistence } from "$/utils/persistence";
+  import { PRINTHEAD_PX, type PrintDirection } from "$/lib/printer";
+  import MdIcon from "$/components/basic/MdIcon.svelte";
+  import { Toasts } from "$/utils/toasts";
+  import { FileUtils } from "$/utils/file_utils";
+  import { z } from "zod";
+
+  interface Props {
+    labelProps: LabelProps;
+    onChange: (newProps: LabelProps) => void;
+  }
+
+  let { labelProps, onChange }: Props = $props();
+
+  const tailPositions: TailPosition[] = ["right", "bottom", "left", "top"];
+  const printDirections: PrintDirection[] = ["left", "top"];
+  const labelShapes: LabelShape[] = ["rect", "rounded_rect", "circle"];
+  const labelSplits: LabelSplit[] = ["none", "vertical", "horizontal"];
+  const mirrorTypes: MirrorType[] = ["none", "flip", "copy"];
+
+  /** Presets that earlier versions saved together with the user's own, they are replaced by D11S_ROLLS */
+  const OLD_DEFAULT_TITLES = new Set([
+    "22×12 mm",
+    "30×12 mm",
+    "40×12 mm",
+    "30×14 mm",
+    "40×14 mm",
+    "50×14 mm",
+    "75×14 mm",
+    "30×15 mm",
+    "50×15 mm",
+  ]);
+
+  let toggleEl: HTMLButtonElement;
+  let userPresets = $state<LabelPreset[]>([]);
+  let customOpen = $state<boolean>(false);
+
+  // Custom size form, in mm
+  let title = $state<string>("");
+  let width = $state<number>(0);
+  let height = $state<number>(0);
+  let printDirection = $state<PrintDirection>("left");
+  let shape = $state<LabelShape>("rect");
+  let split = $state<LabelSplit>("none");
+  let splitParts = $state<number>(2);
+  let tailLength = $state<number>(0);
+  let tailPos = $state<TailPosition>("right");
+  let mirror = $state<MirrorType>("none");
+
+  const printheadDots = (): number => $printerMeta?.printheadPixels ?? PRINTHEAD_PX;
+  const mm = (dots: number): number => Math.round((dots / DOTS_PER_MM) * 10) / 10;
+
+  /** Old presets may be in px or use another dot density; the D11s is always 8 dots/mm */
+  const presetDots = (preset: LabelPreset, value: number): number =>
+    preset.unit === "mm" ? value * DOTS_PER_MM : value;
+
+  /** The physical label, not the printable area */
+  const paperDots = (props: LabelProps) => props.paper ?? props.size;
+
+  let sizeLabel = $derived.by<string>(() => {
+    const paper = paperDots(labelProps);
+    return `${mm(paper.width)}×${mm(paper.height)} mm`;
+  });
+
+  let error = $derived.by<string>(() => {
+    let error = "";
+
+    if ($printerMeta !== undefined && $printerMeta.printDirection !== labelProps.printDirection) {
+      error += $tr("params.label.warning.direction") + " ";
+      if ($printerMeta.printDirection == "left") {
+        error += $tr("params.label.direction.left");
+      } else {
+        error += $tr("params.label.direction.top");
+      }
+    }
+
+    return error;
+  });
+
+  /** What the printer can't reach on a label of the size typed in the custom form */
+  let customAcross = $derived<number>(printDirection === "left" ? height : width);
+  let printableMm = $derived<number>(mm(printheadDots()));
+
+  /**
+   * Build label props for a paper size in dots. The printhead covers the middle `printheadDots` of the
+   * label, so the design area is the paper clamped to that (rounded down to whole bytes), and it starts
+   * printing a little after the front edge.
+   */
+  const makeLabelProps = (preset: LabelPreset): LabelProps => {
+    const paperW = Math.max(DOTS_PER_MM, Math.round(presetDots(preset, preset.width)));
+    const paperH = Math.max(DOTS_PER_MM, Math.round(presetDots(preset, preset.height)));
+    const head = printheadDots();
+
+    let sizeW = paperW;
+    let sizeH = paperH;
+    if (preset.printDirection === "left") {
+      sizeH = Math.min(paperH, head);
+      sizeH = Math.max(8, sizeH - (sizeH % 8));
+    } else {
+      sizeW = Math.min(paperW, head);
+      sizeW = Math.max(8, sizeW - (sizeW % 8));
+    }
+
+    const props: LabelProps = {
+      printDirection: preset.printDirection,
+      size: { width: sizeW, height: sizeH },
+      shape: preset.shape ?? "rect",
+      split: preset.split ?? "none",
+      splitParts: preset.splitParts ?? 2,
+      tailPos: preset.tailPos ?? "right",
+      tailLength: Math.floor(presetDots(preset, preset.tailLength ?? 0)),
+      mirror: preset.mirror ?? "none",
+    };
+
+    if (paperW !== sizeW || paperH !== sizeH) {
+      props.paper = { width: paperW, height: paperH };
+    }
+
+    return withPrintStartMargin(props);
+  };
+
+  const isActive = (preset: LabelPreset): boolean => {
+    const target = makeLabelProps(preset);
+    const a = paperDots(target);
+    const b = paperDots(labelProps);
+    return (
+      a.width === b.width &&
+      a.height === b.height &&
+      target.printDirection === labelProps.printDirection &&
+      (target.shape ?? "rect") === (labelProps.shape ?? "rect") &&
+      (target.split ?? "none") === (labelProps.split ?? "none")
+    );
+  };
+
+  const presetTitle = (preset: LabelPreset): string => {
+    if (preset.title) return preset.title;
+    return `${mm(presetDots(preset, preset.width))}×${mm(presetDots(preset, preset.height))} mm`;
+  };
+
+  /** Mini label drawing, scaled to fit a 64×28 px box */
+  const thumbStyle = (preset: LabelPreset): string => {
+    const w = presetDots(preset, preset.width);
+    const h = presetDots(preset, preset.height);
+    const scale = Math.min(64 / w, 28 / h);
+    return `width: ${Math.round(w * scale)}px; height: ${Math.round(h * scale)}px;`;
+  };
+
+  const closeMenu = () => Dropdown.getOrCreateInstance(toggleEl).hide();
+
+  const applyPreset = (preset: LabelPreset) => {
+    onChange(makeLabelProps(preset));
+    closeMenu();
+  };
+
+  const formPreset = (): LabelPreset => ({
+    dpmm: DOTS_PER_MM,
+    unit: "mm",
+    printDirection,
+    width,
+    height,
+    title: title.trim() || undefined,
+    shape,
+    split,
+    splitParts,
+    tailPos,
+    tailLength,
+    mirror,
+  });
+
+  const onApplyCustom = () => {
+    onChange(makeLabelProps(formPreset()));
+    closeMenu();
+  };
+
+  const saveUserPresets = (presets: LabelPreset[]) => {
+    try {
+      LocalStoragePersistence.saveLabelPresets(presets);
+      userPresets = presets;
+    } catch (e) {
+      Toasts.zodErrors(e, "Presets save error:");
+    }
+  };
+
+  const onSavePreset = () => {
+    saveUserPresets([...userPresets, formPreset()]);
+  };
+
+  const onDeletePreset = (idx: number) => {
+    if (!confirm(`${$tr("params.label.delete_size")} ${presetTitle(userPresets[idx])}?`)) {
+      return;
+    }
+    const result = [...userPresets];
+    result.splice(idx, 1);
+    saveUserPresets(result);
+  };
+
+  /** Prefill the custom form with the current label */
+  const fillWithCurrentParams = () => {
+    const paper = paperDots(labelProps);
+    width = mm(paper.width);
+    height = mm(paper.height);
+    printDirection = labelProps.printDirection;
+    shape = labelProps.shape ?? "rect";
+    split = labelProps.split ?? "none";
+    splitParts = labelProps.splitParts ?? 2;
+    tailPos = labelProps.tailPos ?? "right";
+    tailLength = mm(labelProps.tailLength ?? 0);
+    mirror = labelProps.mirror ?? "none";
+  };
+
+  const toggleCustom = () => {
+    customOpen = !customOpen;
+    if (customOpen) fillWithCurrentParams();
+  };
+
+  const onFlip = () => {
+    const widthTmp = width;
+    width = height;
+    height = widthTmp;
+    printDirection = printDirection === "top" ? "left" : "top";
+  };
+
+  const onImportClicked = async () => {
+    const contents = await FileUtils.pickAndReadSingleTextFile("json");
+    const rawData = JSON.parse(contents);
+
+    if (!confirm($tr("params.label.warning.import"))) {
+      return;
+    }
+
+    try {
+      saveUserPresets(z.array(LabelPresetSchema).parse(rawData));
+    } catch (e) {
+      Toasts.zodErrors(e, "Presets load error:");
+    }
+  };
+
+  const onExportClicked = () => {
+    try {
+      FileUtils.saveLabelPresetsAsJson(userPresets);
+    } catch (e) {
+      Toasts.zodErrors(e, "Presets save error:");
+    }
+  };
+
+  onMount(() => {
+    try {
+      const saved = LocalStoragePersistence.loadLabelPresets() ?? [];
+      userPresets = saved.filter((p) => !OLD_DEFAULT_TITLES.has(p.title ?? ""));
+    } catch (e) {
+      Toasts.zodErrors(e, "Presets load error:");
+    }
+  });
+
+  $effect(() => {
+    if (shape === "circle" && split !== "none") split = "none";
+  });
+
+  $effect(() => {
+    if (split === "none" || tailLength < 0) tailLength = 0;
+  });
+
+  $effect(() => {
+    if (mirror === "flip" && splitParts !== 2) mirror = "copy";
+  });
+</script>
+
+<div class="dropdown">
+  <button
+    class="tool-btn"
+    class:warn={error !== ""}
+    title={error}
+    bind:this={toggleEl}
+    data-bs-toggle="dropdown"
+    data-bs-auto-close="outside">
+    <MdIcon icon="straighten" />
+    <span>{sizeLabel}</span>
+  </button>
+  <div class="dropdown-menu dropdown-sheet size-menu">
+    <h6 class="dropdown-header">{$tr("params.label.menu_title")}</h6>
+
+    <div class="px-3 pb-3">
+      <div class="section-title">{$tr("params.label.rolls")}</div>
+      <div class="roll-grid">
+        {#each D11S_ROLLS as roll (roll.title)}
+          <button class="roll-btn" class:active={isActive(roll)} onclick={() => applyPreset(roll)}>
+            <span class="thumb-box"><span class="thumb" style={thumbStyle(roll)}></span></span>
+            <span>{presetTitle(roll)}</span>
+          </button>
+        {/each}
+      </div>
+
+      {#if userPresets.length > 0}
+        <div class="section-title">{$tr("params.label.my_sizes")}</div>
+        <div class="chips">
+          {#each userPresets as preset, idx (idx)}
+            <div class="chip" class:active={isActive(preset)}>
+              <button class="chip-main" onclick={() => applyPreset(preset)}>{presetTitle(preset)}</button>
+              <button
+                class="chip-del"
+                onclick={() => onDeletePreset(idx)}
+                title={$tr("params.label.delete_size")}
+                aria-label={$tr("params.label.delete_size")}>
+                <MdIcon icon="close" />
+              </button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+
+      <button class="btn btn-outline-secondary custom-toggle" onclick={toggleCustom} aria-expanded={customOpen}>
+        <MdIcon icon="tune" />
+        <span class="flex-grow-1 text-start">{$tr("params.label.custom")}</span>
+        <MdIcon icon={customOpen ? "expand_less" : "expand_more"} />
+      </button>
+
+      {#if customOpen}
+        <div class="custom-form">
+          <div class="input-group flex-nowrap input-group-sm mb-1">
+            <span class="input-group-text">{$tr("params.label.size")}</span>
+            <input class="form-control" type="number" min="1" step="1" inputmode="decimal" bind:value={width} />
+            <button class="btn btn-sm btn-secondary" onclick={onFlip} title={$tr("params.label.direction")}>
+              <MdIcon icon="swap_horiz" />
+            </button>
+            <input class="form-control" type="number" min="1" step="1" inputmode="decimal" bind:value={height} />
+            <span class="input-group-text">{$tr("params.label.mm")}</span>
+          </div>
+          <div class="form-text mb-2">
+            {#if customAcross > printableMm}
+              {$tr("params.label.printable_note").replace("{printable}", String(printableMm)).replace("{label}", String(customAcross))}
+            {:else}
+              {$tr("params.label.size_hint")}
+            {/if}
+          </div>
+
+          <div class="input-group flex-nowrap input-group-sm print-dir-switch mb-2" role="group">
+            <span class="input-group-text w-100">{$tr("params.label.direction")}</span>
+            {#each printDirections as v (v)}
+              <input
+                type="radio"
+                class="btn-check"
+                name="print-dir"
+                id="print-dir-{v}"
+                autocomplete="off"
+                bind:group={printDirection}
+                value={v} />
+              <label class="btn btn-outline-secondary px-3" for="print-dir-{v}">
+                <div class="svg-icon"></div>
+              </label>
+            {/each}
+          </div>
+
+          <div class="input-group flex-nowrap input-group-sm label-shape-switch mb-2" role="group">
+            <span class="input-group-text w-100">{$tr("params.label.shape")}</span>
+            {#each labelShapes as v (v)}
+              <input
+                type="radio"
+                class="btn-check"
+                name="label-shape"
+                id="label-shape-{v}"
+                autocomplete="off"
+                bind:group={shape}
+                value={v} />
+              <label class="btn btn-outline-secondary px-3" for="label-shape-{v}">
+                <div class="svg-icon"></div>
+              </label>
+            {/each}
+          </div>
+
+          {#if shape !== "circle"}
+            <div class="input-group flex-nowrap input-group-sm label-split-switch mb-2" role="group">
+              <span class="input-group-text w-100">{$tr("params.label.split")}</span>
+              {#each labelSplits as v (v)}
+                <input
+                  type="radio"
+                  class="btn-check"
+                  name="label-split"
+                  id="label-split-{v}"
+                  autocomplete="off"
+                  bind:group={split}
+                  value={v} />
+                <label class="btn btn-outline-secondary px-3" for="label-split-{v}">
+                  <div class="svg-icon"></div>
+                </label>
+              {/each}
+            </div>
+
+            {#if split !== "none"}
+              <div class="input-group flex-nowrap input-group-sm mb-2">
+                <span class="input-group-text">{$tr("params.label.split.count")}</span>
+                <input class="form-control" type="number" min="1" bind:value={splitParts} />
+              </div>
+            {/if}
+          {/if}
+
+          {#if split !== "none"}
+            <div class="input-group flex-nowrap input-group-sm mirror-switch mb-2" role="group">
+              <span class="input-group-text w-100">{$tr("params.label.mirror")}</span>
+              {#each mirrorTypes as v (v)}
+                <input
+                  type="radio"
+                  class="btn-check"
+                  name="mirror"
+                  id="mirror-{v}"
+                  autocomplete="off"
+                  bind:group={mirror}
+                  value={v} />
+                <label class="btn btn-outline-secondary px-3" for="mirror-{v}">
+                  <div class="svg-icon"></div>
+                </label>
+              {/each}
+            </div>
+
+            <div class="input-group flex-nowrap input-group-sm tail-pos-switch mb-2" role="group">
+              <span class="input-group-text w-100">{$tr("params.label.tail.position")}</span>
+              {#each tailPositions as v (v)}
+                <input
+                  type="radio"
+                  class="btn-check"
+                  name="tail-pos"
+                  id="tail-{v}"
+                  autocomplete="off"
+                  bind:group={tailPos}
+                  value={v} />
+                <label class="btn btn-outline-secondary px-3" for="tail-{v}">
+                  <div class="svg-icon"></div>
+                </label>
+              {/each}
+            </div>
+
+            <div class="input-group flex-nowrap input-group-sm mb-2">
+              <span class="input-group-text">{$tr("params.label.tail.length")}</span>
+              <input class="form-control" type="number" min="1" bind:value={tailLength} />
+              <span class="input-group-text">{$tr("params.label.mm")}</span>
+            </div>
+          {/if}
+
+          <div class="input-group flex-nowrap input-group-sm mb-2">
+            <span class="input-group-text">{$tr("params.label.label_title")}</span>
+            <input class="form-control" type="text" bind:value={title} />
+          </div>
+
+          <div class="d-flex gap-2 justify-content-end flex-wrap">
+            <button class="btn btn-sm btn-secondary" onclick={onSavePreset}>
+              <MdIcon icon="bookmark_add" />
+              {$tr("params.label.save_template")}
+            </button>
+            <button class="btn btn-sm btn-primary" onclick={onApplyCustom}>{$tr("params.label.apply")}</button>
+          </div>
+
+          <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-sm btn-link text-secondary px-0" onclick={onImportClicked}>
+              <MdIcon icon="data_object" />
+              {$tr("params.label.import")}
+            </button>
+            <button class="btn btn-sm btn-link text-secondary px-0" onclick={onExportClicked}>
+              <MdIcon icon="data_object" />
+              {$tr("params.label.export")}
+            </button>
+          </div>
+        </div>
+      {/if}
+    </div>
+  </div>
+</div>
+
+<style>
+  .dropdown-menu {
+    width: 100vw;
+    max-width: 450px;
+  }
+
+  .section-title {
+    margin: 0.25rem 0 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-tertiary);
+  }
+
+  .roll-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .roll-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 0.25rem;
+    background: var(--surface-2);
+    border: 1px solid var(--border-standard);
+    border-radius: var(--radius-md);
+    color: var(--ink-primary);
+    font-weight: 600;
+    font-size: 0.875rem;
+  }
+
+  .roll-btn.active,
+  .chip.active {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 1px var(--bs-primary);
+  }
+
+  .thumb-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 28px;
+  }
+
+  .thumb {
+    background: #fff;
+    border-radius: 2px;
+    border-left: 2px solid var(--mark-feed);
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .chip {
+    display: flex;
+    align-items: stretch;
+    background: var(--surface-2);
+    border: 1px solid var(--border-standard);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .chip-main,
+  .chip-del {
+    background: none;
+    border: none;
+    color: var(--ink-primary);
+  }
+
+  .chip-main {
+    padding: 0.5rem 0.25rem 0.5rem 0.875rem;
+    font-size: 0.875rem;
+  }
+
+  .chip-del {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.5rem;
+    color: var(--ink-tertiary);
+  }
+
+  .chip-del:hover,
+  .chip-del:active {
+    color: var(--bs-danger);
+  }
+
+  .custom-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .custom-form {
+    margin-top: 0.75rem;
+  }
+
+  .svg-icon {
+    height: 1.5em;
+    width: 1.5em;
+    background-size: cover;
+  }
+
+  .tail-pos-switch .svg-icon {
+    background-image: url("../assets/tail-pos.svg");
+  }
+  .tail-pos-switch label[for="tail-bottom"] .svg-icon {
+    transform: rotate(90deg);
+  }
+  .tail-pos-switch label[for="tail-left"] .svg-icon {
+    transform: rotate(180deg);
+  }
+  .tail-pos-switch label[for="tail-top"] .svg-icon {
+    transform: rotate(270deg);
+  }
+  .print-dir-switch .svg-icon {
+    background-image: url("../assets/print-dir.svg");
+  }
+  .print-dir-switch label[for="print-dir-top"] .svg-icon {
+    transform: rotate(90deg);
+  }
+
+  .label-shape-switch label[for="label-shape-rect"] .svg-icon {
+    background-image: url("../assets/shape-rect.svg");
+  }
+  .label-shape-switch label[for="label-shape-rounded_rect"] .svg-icon {
+    background-image: url("../assets/shape-rrect.svg");
+  }
+  .label-shape-switch label[for="label-shape-circle"] .svg-icon {
+    background-image: url("../assets/shape-circle.svg");
+  }
+
+  .label-split-switch label[for="label-split-none"] .svg-icon {
+    background-image: url("../assets/shape-rrect.svg");
+  }
+  .label-split-switch label[for="label-split-vertical"] .svg-icon {
+    background-image: url("../assets/split-vertical.svg");
+    transform: rotate(90deg);
+  }
+  .label-split-switch label[for="label-split-horizontal"] .svg-icon {
+    background-image: url("../assets/split-vertical.svg");
+  }
+
+  .mirror-switch label[for="mirror-none"] .svg-icon {
+    background-image: url("../assets/mirror-none.svg");
+  }
+  .mirror-switch label[for="mirror-copy"] .svg-icon {
+    background-image: url("../assets/mirror-copy.svg");
+  }
+  .mirror-switch label[for="mirror-flip"] .svg-icon {
+    background-image: url("../assets/mirror-flip.svg");
+  }
+</style>
