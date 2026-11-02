@@ -269,6 +269,7 @@
     "about.credit.werness": "Die Idee hinter dem Werness-Dithering: die Methode von Brent Werness, wie Lucas Pope sie für Return of the Obra Dinn beschrieben hat. Eigene Umsetzung.",
     "about.license": "Lizenz",
     "about.license.app": "Diese App ist freie Software unter der GNU GPL, Version 3 oder später. Teile aus anderen Projekten behalten ihre MIT-Lizenz; deren Hinweise stehen in NOTICE.",
+    "about.source": "Quellcode",
     "about.components": "Open-Source-Komponenten",
     "about.components.help": "Bibliotheken, Schriften und Symbole, die in dieser App stecken. Tippe auf einen Eintrag, um die Lizenz zu lesen.",
     "about.components.error": "Die Lizenzliste konnte nicht geladen werden.",

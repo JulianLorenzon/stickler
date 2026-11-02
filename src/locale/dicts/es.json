@@ -269,6 +269,7 @@
     "about.credit.werness": "La idea del tramado Werness: el método de Brent Werness, tal como lo describió Lucas Pope para Return of the Obra Dinn. Implementación propia.",
     "about.license": "Licencia",
     "about.license.app": "Esta app es software libre bajo la GNU GPL, versión 3 o posterior. Las partes de otros proyectos conservan su licencia MIT; sus avisos están en NOTICE.",
+    "about.source": "Código fuente",
     "about.components": "Componentes de código abierto",
     "about.components.help": "Bibliotecas, fuentes e iconos incluidos en esta app. Toca uno para leer su licencia.",
     "about.components.error": "No se ha podido cargar la lista de licencias.",

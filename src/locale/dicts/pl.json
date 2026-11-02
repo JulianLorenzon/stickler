@@ -269,6 +269,7 @@
     "about.credit.werness": "Pomysł na rastrowanie Werness: metoda Brenta Wernessa, tak jak opisał ją Lucas Pope przy Return of the Obra Dinn. Własna implementacja.",
     "about.license": "Licencja",
     "about.license.app": "Ta aplikacja to wolne oprogramowanie na licencji GNU GPL w wersji 3 lub późniejszej. Części z innych projektów zachowują licencję MIT; ich informacje są w pliku NOTICE.",
+    "about.source": "Kod źródłowy",
     "about.components": "Komponenty open source",
     "about.components.help": "Biblioteki, czcionki i ikony zawarte w aplikacji. Dotknij pozycji, aby przeczytać licencję.",
     "about.components.error": "Nie udało się wczytać listy licencji.",

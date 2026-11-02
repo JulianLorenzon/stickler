@@ -269,6 +269,7 @@
     "about.credit.werness": "The idea behind the Werness dither mode: Brent Werness's method, as Lucas Pope described it for Return of the Obra Dinn. Our own implementation.",
     "about.license": "Licence",
     "about.license.app": "This app is free software under the GNU GPL, version 3 or later. Parts that come from other projects keep their MIT licence; their notices are in NOTICE.",
+    "about.source": "Source code",
     "about.components": "Open source components",
     "about.components.help": "Libraries, fonts and icons that ship in this app. Tap one to read its licence.",
     "about.components.error": "Couldn't load the licence list.",

@@ -96,6 +96,10 @@
 
   <h3 class="section-title">{$tr("about.license")}</h3>
   <p class="small text-secondary">{$tr("about.license.app")}</p>
+  <p class="small">
+    {$tr("about.source")}:
+    <a href="https://github.com/JulianLorenzon/stickler" target="_blank" rel="noreferrer">github.com/JulianLorenzon/stickler</a>
+  </p>
   {#if licenses}
     <details class="license">
       <summary>NOTICE · copyright and MIT notices</summary>
