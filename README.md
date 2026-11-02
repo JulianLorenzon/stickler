@@ -18,17 +18,20 @@ where Android requires it for any Bluetooth scan), and for the camera the first 
 
 - **Design labels:** text, images, QR codes, barcodes (EAN-13/8, UPC-A/E, ITF, Code 39/93/128, Codabar), lines and
   shapes, on the Fichero label rolls or a custom size
-- **Print photos well on a 1-bit printer:** Atkinson (the default), Floyd–Steinberg, blue noise and Werness
-  dithering, with dot gain correction so greys come out the way they look on screen
+- **Print photos well on a 1-bit printer:** Auto (the default: crisp text, Atkinson-dithered photos), Atkinson,
+  Floyd–Steinberg, blue noise and Werness dithering, with dot correction so greys come out the way they look on
+  screen
 - **See it before you print it:** an "on paper" preview that simulates how the thermal dots spread
 - **Copy codes:** scan a QR code or barcode with the camera and get an editable copy on the label
 - **Batch print** from a data table, one label per row
 - **Calibrate** the print position with an offset test strip
 - **Save** labels on the device and export them as JSON or PNG
+- **In five languages:** English, Dutch, German, Spanish and Polish
 
 ## Get it
 
-Stickler runs on Android 6.0 or newer. For now it's shared as an APK; ask for a copy. To build it yourself, see
+Stickler runs on Android 6.0 or newer and is on its way to Google Play; see
+[stickler.julianlorenzon.com](https://stickler.julianlorenzon.com/). To build it yourself, see
 [docs/BUILDING.md](docs/BUILDING.md).
 
 ## The printer
