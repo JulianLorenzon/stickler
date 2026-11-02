@@ -16,6 +16,7 @@ import { CanvasUtils } from "$/utils/canvas_utils";
 import { LocalStoragePersistence } from "./persistence";
 import { csvData, loadedFonts } from "$/stores";
 import { get } from "svelte/store";
+import { Toasts } from "$/utils/toasts";
 
 export class FileUtils {
   static timestamp(): number {
@@ -29,7 +30,11 @@ export class FileUtils {
   /** Convert string to base64 string */
   static base64str(str: string): string {
     const bytes = new TextEncoder().encode(str);
-    const binString = String.fromCodePoint(...bytes);
+    // In chunks: spreading all bytes as arguments throws past ~150 kB (a label with a photo)
+    let binString = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binString += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
     return btoa(binString);
   }
 
@@ -138,7 +143,10 @@ export class FileUtils {
 
   static async downloadBase64(filename: string, mime: string, base64Data: string) {
     if (Capacitor.getPlatform() !== "web") {
-      FileUtils.downloadBase64Capacitor(filename, base64Data);
+      // Async: without the catch a failure would do nothing at all
+      FileUtils.downloadBase64Capacitor(filename, base64Data).catch((e) => {
+        if (!`${e}`.toLowerCase().includes("cancel")) Toasts.error(e);
+      });
       return;
     }
 
@@ -179,6 +187,11 @@ export class FileUtils {
     return tpl;
   }
 
+  /** A file name without characters that break saving or sharing ("/" would make a folder) */
+  static safeFilename(name: string): string {
+    return name.replaceAll(/[\\/:*?"<>|#%\u0000-\u001f]/g, "_").trim();
+  }
+
   /** Convert label template to JSON and download it */
   static saveLabelAsJson(label: ExportedLabelTemplate) {
     const parsed = ExportedLabelTemplateSchema.omit({ id: true }).parse(label);
@@ -186,7 +199,7 @@ export class FileUtils {
     let filename = `label_${timestamp}.json`;
 
     if (parsed.title && parsed.title.trim().length > 0) {
-      filename = `${parsed.title}.json`;
+      filename = `${FileUtils.safeFilename(parsed.title)}.json`;
     }
 
     FileUtils.downloadBase64(filename, "application/json", FileUtils.base64obj(parsed));

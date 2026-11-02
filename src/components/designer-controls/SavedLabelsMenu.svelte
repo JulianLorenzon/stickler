@@ -190,7 +190,7 @@
     try {
       const label = onRequestLabelTemplate();
       if (selectedIndex !== -1 && savedLabels[selectedIndex]?.title) {
-        label.title = savedLabels[selectedIndex].title!.replaceAll(/[\\/:*?"<>|]/g, "_");
+        label.title = savedLabels[selectedIndex].title;
       }
       FileUtils.saveLabelAsJson(label);
     } catch (e) {

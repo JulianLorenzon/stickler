@@ -40,6 +40,9 @@ export class Toasts {
       e.issues.forEach((i) => {
         this.error(`${prefix} "${i.path.join("→")}" ${i.message}`);
       });
+    } else {
+      // Anything else used to vanish without a word
+      this.error(`${prefix} ${e}`);
     }
   }
 }
