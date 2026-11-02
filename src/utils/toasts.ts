@@ -1,8 +1,18 @@
 import Toastify from "toastify-js";
 import { z } from "zod";
 
-/** Keep toasts clear of the bottom action bar */
-const TOAST_POSITION = { gravity: "bottom", position: "center", offset: { x: 0, y: 72 } } as const;
+/** Toastify's own gap above a top toast */
+const TOASTIFY_TOP = 15;
+
+/**
+ * Toasts go at the top of the label workspace, under the app bar and the doc toolbar, so they cover neither those
+ * buttons nor the add/print bars at the bottom. Without the workspace (it's always there now) under the app bar.
+ */
+const toastPosition = () => {
+  const workspace = document.querySelector(".workspace")?.getBoundingClientRect().top;
+  const top = workspace ?? document.querySelector(".app-bar")?.getBoundingClientRect().bottom ?? 0;
+  return { gravity: "top", position: "center", offset: { x: 0, y: Math.max(0, top + 8 - TOASTIFY_TOP) } } as const;
+};
 
 export class Toasts {
   static error(e: any) {
@@ -10,7 +20,7 @@ export class Toasts {
 
     Toastify({
       text: `${e}`,
-      ...TOAST_POSITION,
+      ...toastPosition(),
       duration: 5000,
       className: "toast-danger",
     }).showToast();
@@ -19,7 +29,7 @@ export class Toasts {
   static message(text: string) {
     Toastify({
       text,
-      ...TOAST_POSITION,
+      ...toastPosition(),
       duration: 5000,
       className: "toast-info",
     }).showToast();

@@ -62,8 +62,8 @@
   let density = $state<number>($printerMeta?.densityDefault ?? 2);
   let speed = $state<0 | 1>(1);
   let quantity = $state<number>(1);
-  // Atkinson printed photos best on the D11s (2026-10-31); text and codes come out as with a plain threshold
-  let postProcessType = $state<PostProcessType>("dither");
+  // Auto: text and codes thresholded, photos dithered with Atkinson, which printed them best on the D11s (2026-10-31)
+  let postProcessType = $state<PostProcessType>("smart");
   let postProcessInvert = $state<boolean>(false);
   /** Modes that keep the average grey, where the slider shifts the greys instead of setting a threshold */
   const usesTone = $derived(["floyd", "bluenoise", "werness"].includes(postProcessType));
@@ -300,12 +300,12 @@
   };
 
   /**
-   * Grey test: one label per dithering mode (Auto dithers photos with Floyd–Steinberg). Atkinson uses the threshold
-   * slider, like its dot correction does
+   * Grey test: one label per dithering mode. Atkinson uses the threshold slider, like its dot correction does; Auto
+   * dithers photos with Atkinson at 128
    */
   const GREY_TEST_MODES: { name: string; mode: PostProcessType; dither: (iData: ImageData) => ImageData }[] = [
     { name: "Atkinson", mode: "dither", dither: (iData) => atkinson(iData, thresholdValue) },
-    { name: "Floyd–Steinberg / Auto", mode: "floyd", dither: (iData) => floydSteinberg(iData, 128) },
+    { name: "Floyd–Steinberg", mode: "floyd", dither: (iData) => floydSteinberg(iData, 128) },
     { name: "Blue noise", mode: "bluenoise", dither: blueNoiseDither },
     { name: "Werness", mode: "werness", dither: werness },
   ];
@@ -376,13 +376,14 @@
   const curveFor = (mode: PostProcessType): Uint8ClampedArray | undefined => {
     if (!dotGain) return undefined;
     switch (mode) {
-      case "smart":
       case "floyd":
         return dotGainCurve("floyd", (i) => floydSteinberg(i, 128));
       case "bluenoise":
         return dotGainCurve("bluenoise", blueNoiseDither);
       case "werness":
         return dotGainCurve("werness", werness);
+      case "smart":
+        return dotGainCurve("atkinson:128", (i) => atkinson(i, 128));
       case "dither":
         return dotGainCurve(`atkinson:${thresholdValue}`, (i) => atkinson(i, thresholdValue));
       case "bayer":

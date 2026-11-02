@@ -25,33 +25,41 @@ export const threshold = (image: ImageData, threshold: number): ImageData => {
 };
 
 /**
- * Change the image to blank and white using the Atkinson algorithm
+ * Change the image to blank and white using the Atkinson algorithm. Pixels outside `mask` (when given) are left
+ * untouched and receive no error.
  *
  * @param  {object}   image         The imageData of a Canvas 2d context
  * @param  {number}   threshold     Threshold value (0-255)
+ * @param  {Uint8Array} mask        Optional, 1 where pixels get dithered
  * @return {object}                 The resulting imageData
  *
  */
-export const atkinson = (image: ImageData, threshold: number): ImageData => {
+export const atkinson = (image: ImageData, threshold: number, mask?: Uint8Array): ImageData => {
   const src = image.data;
+  const w = image.width;
   // Float buffer: a clamped buffer silently drops diffused error near black and white
-  const dst = new Float32Array(image.width * image.height);
+  const dst = new Float32Array(w * image.height);
 
   for (let l = 0, i = 0; i < src.length; l++, i += 4) {
     dst[l] = src[i] * 0.299 + src[i + 1] * 0.587 + src[i + 2] * 0.114;
   }
 
+  const spread = (l: number, error: number) => {
+    if (mask === undefined || mask[l] === 1) dst[l] += error;
+  };
+
   for (let l = 0, i = 0; i < src.length; l++, i += 4) {
+    if (mask !== undefined && mask[l] !== 1) continue;
     const value = dst[l] < threshold ? 0 : 255;
     const error = (dst[l] - value) / 8;
     src.fill(value, i, i + 3);
 
-    dst[l + 1] += error;
-    dst[l + 2] += error;
-    dst[l + image.width - 1] += error;
-    dst[l + image.width] += error;
-    dst[l + image.width + 1] += error;
-    dst[l + 2 * image.width] += error;
+    spread(l + 1, error);
+    spread(l + 2, error);
+    spread(l + w - 1, error);
+    spread(l + w, error);
+    spread(l + w + 1, error);
+    spread(l + 2 * w, error);
   }
 
   return image;
@@ -400,8 +408,9 @@ export const autocontrast = (image: ImageData, cutoff: number = 0.01, mask?: Uin
 };
 
 /**
- * "Auto" mode. The official app's default label mode thresholds everything at 128, photos included. Here text
- * and shapes are thresholded the same way so edges stay crisp, while photos are contrast-stretched and dithered.
+ * "Auto" mode, the default. The official app's default label mode thresholds everything at 128, photos included.
+ * Here text and shapes are thresholded the same way so edges stay crisp, while photos are contrast-stretched and
+ * dithered with Atkinson at 128 (it printed photos best on the D11s).
  * `label` is the full render; `photos` holds only the visible photo pixels on a transparent background, its alpha
  * marks where a photo is on top.
  */
@@ -423,7 +432,7 @@ export const smartProcess = (
 
   autocontrast(photos, 0.01, mask);
   if (curve) applyCurve(photos, curve, mask);
-  floydSteinberg(photos, 128, mask);
+  atkinson(photos, 128, mask);
 
   for (let l = 0, i = 0; l < mask.length; l++, i += 4) {
     if (mask[l] === 1) {
