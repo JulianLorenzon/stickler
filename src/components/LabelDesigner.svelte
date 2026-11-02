@@ -352,8 +352,7 @@
     } catch (e) {
       Toasts.error(e);
     }
-
-    LabelDesignerObjectHelper.addText(fabricCanvas!, $tr("editor.default_text"));
+    // Without a default label: start empty, the add bar is right there
   };
 
   const renderOnFontsChanged = () => {

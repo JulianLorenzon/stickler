@@ -11,7 +11,6 @@
     "editor.clear": "Очистить холст",
     "editor.clear.confirm": "Очистить содержимое холста?",
     "editor.clone": "Клонировать",
-    "editor.default_text": "Текст",
     "editor.delete": "Удалить",
     "editor.iconpicker.add": "Добавить свою иконку",
     "editor.iconpicker.delete_mode": "Режим удаления",

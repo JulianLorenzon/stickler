@@ -364,7 +364,9 @@ export class CapBleClient extends PrinterClient {
       throw new Error("Device ID is required for native Bluetooth. Use the scan UI to select a device.");
     }
 
-    await BleClient.initialize();
+    // Same as the scan's initialize: without the flag the plugin asks for fine location on Android 12+, which the
+    // manifest only declares up to Android 11, so connecting would fail
+    await BleClient.initialize({ androidNeverForLocation: true });
 
     this.deviceId = opts.deviceId;
 

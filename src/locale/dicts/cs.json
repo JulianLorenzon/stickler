@@ -6,7 +6,6 @@
     "connector.disconnect.heartbeat": "Odpojeno (tiskárna neodpovídá)",
     "connector.serial": "Sériové (USB)",
     "editor.clone": "Klonovat",
-    "editor.default_text": "Text",
     "editor.delete": "Smazat",
     "editor.iconpicker.mdi_link_title": "Podrobný seznam",
     "editor.iconpicker.search": "Hledat",

@@ -6,7 +6,6 @@
     "connector.disconnect.heartbeat": "Rozłączono (drukarka nie odpowiada)",
     "connector.serial": "Port szeregowy (USB)",
     "editor.clone": "Klonuj",
-    "editor.default_text": "Tekst",
     "editor.delete": "Usuń",
     "editor.iconpicker.mdi_link_title": "Zobacz szczegółową listę tutaj",
     "editor.iconpicker.search": "Szukaj",

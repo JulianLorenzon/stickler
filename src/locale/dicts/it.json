@@ -6,7 +6,6 @@
     "connector.disconnect.heartbeat": "Disconnesso (la stampante non risponde)",
     "connector.serial": "Seriale (USB)",
     "editor.clone": "Clona",
-    "editor.default_text": "Testo",
     "editor.delete": "Elimina",
     "editor.iconpicker.mdi_link_title": "Vedi elenco dettagliato",
     "editor.iconpicker.search": "Cerca",

@@ -6,7 +6,6 @@
     "connector.disconnect.heartbeat": "Getrennt (Drucker reagiert nicht)",
     "connector.serial": "Seriell (USB)",
     "editor.clone": "Klonen",
-    "editor.default_text": "Text",
     "editor.delete": "Löschen",
     "editor.iconpicker.mdi_link_title": "Siehe detaillierte Liste hier",
     "editor.iconpicker.search": "Suchen",

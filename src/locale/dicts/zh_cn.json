@@ -6,7 +6,6 @@
     "connector.disconnect.heartbeat": "已断开（打印机无响应）",
     "connector.serial": "串口（USB）",
     "editor.clone": "复制",
-    "editor.default_text": "文本",
     "editor.delete": "删除",
     "editor.iconpicker.mdi_link_title": "在这里查看详细列表",
     "editor.iconpicker.search": "搜索",
