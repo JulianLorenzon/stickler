@@ -69,7 +69,6 @@
     "params.saved_labels.kb_used": "kB użyto",
     "params.saved_labels.label_title.placeholder": "(opcjonalnie)",
     "params.saved_labels.label_title": "Tytuł",
-    "params.saved_labels.load.browser": "Wczytaj",
     "params.saved_labels.load.json": "Importuj",
     "params.saved_labels.make_default": "Ustaw jako domyślne",
     "params.saved_labels.menu_title": "Zapis/odczyt (pamięć przeglądarki)",

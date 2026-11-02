@@ -64,7 +64,6 @@
     "params.saved_labels.kb_used": "kB benutzt",
     "params.saved_labels.label_title.placeholder": "(optional)",
     "params.saved_labels.label_title": "Titel",
-    "params.saved_labels.load.browser": "Laden",
     "params.saved_labels.load.json": "Import",
     "params.saved_labels.make_default": "Standard machen",
     "params.saved_labels.menu_title": "Speichern/Laden (Browserspeicher)",

@@ -28,9 +28,26 @@
     usedSpace = LocalStoragePersistence.usedSpace();
   };
 
+  /** A tap opens the label. It stays selected, so "Save (replace)" saves the edits back onto it */
   const onLabelSelected = (index: number) => {
+    const label = savedLabels[index];
+    if (label === undefined) return;
+
+    // Only ask when there's something on the canvas to lose
+    if (canvas.getObjects().length > 0) {
+      let message = $tr("editor.warning.load");
+      if (label.csv) {
+        message += "\n" + $tr("editor.warning.load.csv");
+      }
+      if (!confirm(message)) {
+        return;
+      }
+    }
+
     selectedIndex = index;
-    title = savedLabels[index]?.title ?? "";
+    title = label.title ?? "";
+    onLoadRequested(label);
+    new Dropdown(dropdownRef).hide();
   };
 
   const onLabelExport = (idx: number) => {
@@ -102,27 +119,6 @@
     label.title = title;
     const result = [...savedLabels, label];
     saveLabels(result);
-  };
-
-  const onLoadClicked = () => {
-    if (selectedIndex === -1) {
-      return;
-    }
-
-    const label = savedLabels[selectedIndex];
-
-    let message = $tr("editor.warning.load");
-
-    if (label.csv) {
-      message += "\n" + $tr("editor.warning.load.csv");
-    }
-
-    if (!confirm(message)) {
-      return;
-    }
-
-    onLoadRequested(label);
-    new Dropdown(dropdownRef).hide();
   };
 
   const onImportClicked = async () => {
@@ -282,11 +278,6 @@
           <button class="btn btn-sm btn-secondary" onclick={onSaveReplaceClicked}>
             <MdIcon icon="edit_note" />
             {$tr("params.saved_labels.save.browser.replace")}
-          </button>
-
-          <button class="btn btn-sm btn-primary" onclick={onLoadClicked}>
-            <MdIcon icon="folder" />
-            {$tr("params.saved_labels.load.browser")}
           </button>
         {/if}
       </div>

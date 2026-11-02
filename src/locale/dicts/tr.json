@@ -80,7 +80,6 @@
     "params.saved_labels.kb_used": "kB kullanıldı",
     "params.saved_labels.label_title.placeholder": "(isteğe bağlı)",
     "params.saved_labels.label_title": "Başlık",
-    "params.saved_labels.load.browser": "Yükle",
     "params.saved_labels.load.json": "İçe Aktar",
     "params.saved_labels.make_default": "Varsayılan yap",
     "params.saved_labels.menu_title": "Kaydet/Yükle (tarayıcı depolama)",

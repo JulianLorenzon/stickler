@@ -80,7 +80,6 @@
     "params.saved_labels.kb_used": "KB 已使用",
     "params.saved_labels.label_title.placeholder": "（選填）",
     "params.saved_labels.label_title": "標題",
-    "params.saved_labels.load.browser": "載入",
     "params.saved_labels.load.json": "匯入",
     "params.saved_labels.make_default": "設為預設",
     "params.saved_labels.menu_title": "儲存/載入（瀏覽器儲存空間）",

@@ -64,7 +64,6 @@
     "params.saved_labels.kb_used": "kB utilizzati",
     "params.saved_labels.label_title.placeholder": "(facoltativo)",
     "params.saved_labels.label_title": "Titolo",
-    "params.saved_labels.load.browser": "Carica",
     "params.saved_labels.load.json": "Importa",
     "params.saved_labels.make_default": "Rendere predefinito",
     "params.saved_labels.menu_title": "Salva/carica (salva in browser)",

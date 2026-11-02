@@ -121,7 +121,6 @@
     "params.saved_labels.kb_used": "वापरलेले kB",
     "params.saved_labels.label_title.placeholder": "(ऐच्छिक)",
     "params.saved_labels.label_title": "शीर्षक",
-    "params.saved_labels.load.browser": "लोड करा",
     "params.saved_labels.load.json": "आयात करा",
     "params.saved_labels.make_default": "डीफॉल्ट करा",
     "params.saved_labels.menu_title": "जतन/लोड करा (ब्राउझर स्टोरेज)",

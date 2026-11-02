@@ -88,7 +88,6 @@
     "params.saved_labels.kb_used": "кБ использовано",
     "params.saved_labels.label_title.placeholder": "(необязательно)",
     "params.saved_labels.label_title": "Название",
-    "params.saved_labels.load.browser": "Открыть",
     "params.saved_labels.load.json": "Импорт",
     "params.saved_labels.make_default": "Сделать базовым",
     "params.saved_labels.menu_title": "Сохранить/загрузить (хранилище браузера)",

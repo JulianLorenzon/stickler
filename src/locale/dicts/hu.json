@@ -80,7 +80,6 @@
     "params.saved_labels.kb_used": "kB felhasználva",
     "params.saved_labels.label_title.placeholder": "(tetszőleges)",
     "params.saved_labels.label_title": "Cím",
-    "params.saved_labels.load.browser": "Betöltés",
     "params.saved_labels.load.json": "Betöltés",
     "params.saved_labels.make_default": "Make default",
     "params.saved_labels.menu_title": "Save/load (browser storage)",

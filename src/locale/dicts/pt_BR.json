@@ -79,7 +79,6 @@
     "params.saved_labels.kb_used": "kB usados",
     "params.saved_labels.label_title.placeholder": "(opcional)",
     "params.saved_labels.label_title": "Título",
-    "params.saved_labels.load.browser": "Carregar",
     "params.saved_labels.load.json": "Importar",
     "params.saved_labels.make_default": "Definir como padrão",
     "params.saved_labels.menu_title": "Salvar/carregar (armazenamento do navegador)",

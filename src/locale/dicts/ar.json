@@ -79,7 +79,6 @@
     "params.saved_labels.kb_used": "الكيلوبايت المستخدم",
     "params.saved_labels.label_title.placeholder": "(اختياري)",
     "params.saved_labels.label_title": "عنوان",
-    "params.saved_labels.load.browser": "تحميل",
     "params.saved_labels.load.json": "استيراد",
     "params.saved_labels.make_default": "تعيين كافتراضي",
     "params.saved_labels.menu_title": "احفظ/حمل (تخزين المتصفح)",

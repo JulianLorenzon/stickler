@@ -69,7 +69,6 @@
     "params.saved_labels.kb_used": "kB využito",
     "params.saved_labels.label_title.placeholder": "(volitelný)",
     "params.saved_labels.label_title": "Titulek",
-    "params.saved_labels.load.browser": "Načíst",
     "params.saved_labels.load.json": "Importovat",
     "params.saved_labels.make_default": "Nastavit jako výchozí",
     "params.saved_labels.menu_title": "Uložit/načíst (úložiště prohlížeče)",

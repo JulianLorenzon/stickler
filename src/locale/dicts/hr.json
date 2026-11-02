@@ -77,7 +77,6 @@
     "params.saved_labels.kb_used": "iskorišteno kB",
     "params.saved_labels.label_title.placeholder": "(neobavezno)",
     "params.saved_labels.label_title": "Naslov",
-    "params.saved_labels.load.browser": "Učitaj",
     "params.saved_labels.load.json": "Uvezi",
     "params.saved_labels.menu_title": "Spremi/učitaj (pohrana u pregledniku)",
     "params.saved_labels.save.browser.replace": "Spremi (zamijeni)",

@@ -80,7 +80,6 @@
     "params.saved_labels.kb_used": "사용된 kB",
     "params.saved_labels.label_title.placeholder": "(선택 사항)",
     "params.saved_labels.label_title": "제목",
-    "params.saved_labels.load.browser": "불러오기",
     "params.saved_labels.load.json": "가져오기",
     "params.saved_labels.make_default": "기본값으로 설정",
     "params.saved_labels.menu_title": "저장/불러오기 (브라우저 저장소)",
