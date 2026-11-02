@@ -38,7 +38,8 @@
 
     <!-- Permissions -->
 
-    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- No INTERNET permission: the app makes no network requests (the WebView serves the bundled files locally).
+         Links like the About screen's open in the browser -->
 
     <!-- Scanning codes: the WebView's camera, asked for on the first scan. Not required, so phones without a
          camera can still install the app -->
@@ -48,8 +49,11 @@
     <!-- Bluetooth (Android 11 and below) -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <!-- Required by capacitor-community/bluetooth-le on all API levels -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Android 11 and below only allow Bluetooth scans with location. From 12 on, BLUETOOTH_SCAN with
+         neverForLocation (and androidNeverForLocation in BleClient.initialize) replaces it. The Bluetooth plugin
+         declares COARSE for all versions; declaring it here with maxSdkVersion caps it -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
 
     <!-- Bluetooth (Android 12+) -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"

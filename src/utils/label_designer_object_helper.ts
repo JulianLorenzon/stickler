@@ -52,14 +52,6 @@ export class LabelDesignerObjectHelper {
     }
   }
 
-  static async addImageBlob(fabricCanvas: fabric.Canvas, img: Blob): Promise<fabric.FabricImage> {
-    const url = await FileUtils.blobToDataUrl(img);
-    const fabricImg = await fabric.FabricImage.fromURL(url);
-    fabricImg.set({ left: 0, top: 0, snapAngle: OBJECT_DEFAULTS.snapAngle });
-    fabricCanvas.add(fabricImg);
-    return fabricImg;
-  }
-
   static async addObjectFromClipboard(
     fabricCanvas: fabric.Canvas,
     data: DataTransfer,

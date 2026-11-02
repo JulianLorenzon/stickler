@@ -176,11 +176,6 @@
     loadLabelData(label).then(() => undo.push(fabricCanvas!, labelProps));
   };
 
-  const zplImageReady = async (img: Blob) => {
-    await LabelDesignerObjectHelper.addImageBlob(fabricCanvas!, img);
-    undo.push(fabricCanvas!, labelProps);
-  };
-
   const onObjectPicked = (objectType: OjectType) => {
     const obj = LabelDesignerObjectHelper.addObject(fabricCanvas!, objectType);
     if (obj !== undefined) {
@@ -650,8 +645,6 @@
           onSubmit={onObjectPicked}
           {onIconPicked}
           {onSvgIconPicked}
-          {labelProps}
-          {zplImageReady}
           onScan={codeScannerAvailable() ? onScan : undefined} />
       </div>
     {/if}

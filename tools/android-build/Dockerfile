@@ -1,5 +1,5 @@
 # Build environment for the APK: JDK 21, Node 20 and the Android SDK (see docs/BUILDING.md).
-# Build-Tools 34 is what AGP 8.7 uses by default; without it Gradle downloads it again in every container.
+# Build-Tools 35 is what AGP 8.9 uses by default; without it Gradle downloads it again in every container.
 # Used by tools/android-build/run.sh, which mounts the repo and a cache volume for Gradle and npm.
 FROM node:20-bookworm-slim AS node
 
@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf
  && unzip -q /tmp/tools.zip -d $ANDROID_HOME/cmdline-tools && mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest \
  && rm /tmp/tools.zip \
  && yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null \
- && $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0" "build-tools;34.0.0" "platform-tools" >/dev/null \
+ && $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" >/dev/null \
  && chmod -R a+rwX $ANDROID_HOME
 
 # The container runs as the calling user, so the caches live in a world-writable volume

@@ -8,7 +8,7 @@ The app is packaged as a native Android app using [Capacitor](https://capacitorj
 - npm
 - JDK 21 ([Temurin](https://adoptium.net/) recommended)
 - Android SDK with:
-  - `platforms;android-35`
+  - `platforms;android-36`
   - `build-tools;35.0.0`
   - `platform-tools`
 
@@ -73,7 +73,11 @@ tools/sign-release.sh path/to/release.jks
 ```
 
 The signed APK is `android/app/build/outputs/apk/release/stickler-<version>.apk`; the script prints the
-certificate it was signed with. For quick tries on your own phone, use a debug build (`./gradlew assembleDebug`)
+certificate it was signed with.
+
+Google Play takes an app bundle instead of an APK. Build it with `./gradlew bundleRelease` and sign it with your
+upload key: `tools/sign-bundle.sh path/to/release.jks <key alias>` (jarsigner, from the JDK, asks for the
+password). The result is `android/app/build/outputs/bundle/release/stickler-<version>.aab`. For quick tries on your own phone, use a debug build (`./gradlew assembleDebug`)
 instead. A debug build and a release build can't update each other, because they're signed with different keys.
 
 R8 (code shrinking) is off: the shrunk build crashed when connecting, and the cause hasn't been found yet.
@@ -85,8 +89,9 @@ container (about 1.6 GB, built on first use). It runs as your user, and Gradle a
 Docker volume `stickler-build-cache`.
 
 ```bash
-tools/android-build/run.sh                              # unsigned release APK (npm ci if needed, vite, cap sync, gradle)
-tools/android-build/run.sh sign path/to/release.jks     # sign it; apksigner asks for the password
+tools/android-build/run.sh                              # unsigned release APK and app bundle (npm ci if needed, vite, cap sync, gradle)
+tools/android-build/run.sh sign path/to/release.jks     # sign the APK; apksigner asks for the password
+tools/android-build/run.sh sign-bundle path/to/release.jks <alias>   # sign the app bundle; jarsigner asks for the password
 tools/android-build/run.sh sh -c 'cd android && ./gradlew assembleDebug'   # any other command
 ```
 
@@ -123,8 +128,10 @@ The following permissions are declared in `AndroidManifest.xml`:
 | `BLUETOOTH`, `BLUETOOTH_ADMIN` | Legacy BLE (Android 11 and below) |
 | `BLUETOOTH_SCAN` | Scan for nearby BLE devices (Android 12+) |
 | `BLUETOOTH_CONNECT` | Connect to a paired device (Android 12+) |
-| `ACCESS_FINE_LOCATION` | Requested at runtime on Android 11 and below only (BLE scanning needs it there) |
+| `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` | Android 11 and below only (`maxSdkVersion` 30): BLE scanning needs them there |
 | `CAMERA` | Scanning QR codes and barcodes; asked for by the WebView on the first scan |
+
+There's no `INTERNET` permission: the WebView serves the bundled files locally, and links open in the browser.
 
 The app requests the Bluetooth permissions at runtime the first time it scans or connects. On Android 12+ it initializes the BLE plugin with `androidNeverForLocation`, so only the Bluetooth permissions are requested. If Bluetooth is off, the system "turn on Bluetooth" dialog is shown.
 

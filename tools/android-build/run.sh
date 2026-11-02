@@ -1,9 +1,11 @@
 #!/bin/sh
-# Builds and signs the APK in Docker (JDK 21, Node 20, Android SDK 35), so nothing needs installing on the host.
+# Builds and signs the APK and app bundle in Docker (JDK 21, Node 20, Android SDK 36), so nothing needs installing on the host.
 # The repo is mounted at its own path; Gradle and npm caches persist in the volume stickler-build-cache.
 #
-#   tools/android-build/run.sh                   unsigned release APK: npm ci (if needed), vite build, cap sync, gradle
-#   tools/android-build/run.sh sign <keystore>   sign it with tools/sign-release.sh (apksigner asks for the password)
+#   tools/android-build/run.sh                   unsigned release APK and app bundle: npm ci (if needed), vite build,
+#                                                cap sync, gradle
+#   tools/android-build/run.sh sign <keystore>   sign the APK with tools/sign-release.sh (apksigner asks for the password)
+#   tools/android-build/run.sh sign-bundle <keystore> <alias>   sign the app bundle with tools/sign-bundle.sh
 #   tools/android-build/run.sh <command...>      anything else, e.g. sh, or sh -c 'cd android && ./gradlew assembleDebug'
 set -e
 here=$(cd "$(dirname "$0")" && pwd); root=$(cd "$here/../.." && pwd)
@@ -22,8 +24,13 @@ if [ "$1" = sign ]; then
   ks=$(cd "$(dirname "$2")" && pwd)/$(basename "$2"); shift 2
   opts="$opts -v $ks:/keys/release.jks:ro"
   set -- tools/sign-release.sh /keys/release.jks "$@"
+elif [ "$1" = sign-bundle ]; then
+  [ -f "$2" ] && [ -n "$3" ] || { echo "usage: $0 sign-bundle <keystore> <key alias>" >&2; exit 1; }
+  ks=$(cd "$(dirname "$2")" && pwd)/$(basename "$2"); alias=$3; shift 3
+  opts="$opts -v $ks:/keys/release.jks:ro"
+  set -- tools/sign-bundle.sh /keys/release.jks "$alias"
 elif [ $# -eq 0 ]; then
-  set -- sh -c '[ -d node_modules ] || npm ci; npm run build && npx cap sync android && cd android && ./gradlew assembleRelease'
+  set -- sh -c '[ -d node_modules ] || npm ci; npm run build && npx cap sync android && cd android && ./gradlew assembleRelease bundleRelease'
 fi
 
 # shellcheck disable=SC2086

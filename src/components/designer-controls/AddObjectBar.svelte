@@ -1,22 +1,19 @@
 <script lang="ts">
-  import { type LabelProps, type OjectType } from "$/types";
+  import { type OjectType } from "$/types";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import type { MaterialIcon } from "$/styles/mdi_icons";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import IconPicker from "$/components/designer-controls/IconPicker.svelte";
-  import ZplImportButton from "$/components/designer-controls/ZplImportButton.svelte";
 
   interface Props {
     onSubmit: (i: OjectType) => void;
     onIconPicked: (i: MaterialIcon) => void;
     onSvgIconPicked: (i: string) => void;
-    labelProps: LabelProps;
-    zplImageReady: (img: Blob) => void;
     /** Shown only where a code scanner is available */
     onScan?: () => void;
   }
 
-  let { onSubmit, onIconPicked, onSvgIconPicked, labelProps, zplImageReady, onScan }: Props = $props();
+  let { onSubmit, onIconPicked, onSvgIconPicked, onScan }: Props = $props();
 
   const objects: { type: OjectType; icon: MaterialIcon; label: TranslationKey }[] = [
     { type: "text", icon: "text_fields", label: "editor.objectpicker.text" },
@@ -44,5 +41,3 @@
 {/each}
 
 <IconPicker onSubmit={onIconPicked} onSubmitSvg={onSvgIconPicked} />
-
-<ZplImportButton {labelProps} onImageReady={zplImageReady} text={$tr("editor.import.zpl")} />
