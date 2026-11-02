@@ -1,6 +1,7 @@
 <script lang="ts">
   import Dropdown from "bootstrap/js/dist/dropdown";
   import {
+    ExportedLabelTemplateSchema,
     LabelPresetSchema,
     type LabelPreset,
     type LabelProps,
@@ -235,19 +236,27 @@
     printDirection = printDirection === "top" ? "left" : "top";
   };
 
+  /** Imports label sizes (presets), replacing the saved ones. Checks the file before asking */
   const onImportClicked = async () => {
-    const contents = await FileUtils.pickAndReadSingleTextFile("json");
-    const rawData = JSON.parse(contents);
+    const rawData = JSON.parse(await FileUtils.pickAndReadSingleTextFile("json"));
+
+    // A label file picked here by mistake: say where it goes instead of a schema error
+    if (ExportedLabelTemplateSchema.safeParse(rawData).success) {
+      Toasts.error($tr("params.label.import.is_label"));
+      return;
+    }
+
+    const presets = z.array(LabelPresetSchema).safeParse(rawData);
+    if (!presets.success) {
+      Toasts.zodErrors(presets.error, "Presets load error:");
+      return;
+    }
 
     if (!confirm($tr("params.label.warning.import"))) {
       return;
     }
 
-    try {
-      saveUserPresets(z.array(LabelPresetSchema).parse(rawData));
-    } catch (e) {
-      Toasts.zodErrors(e, "Presets load error:");
-    }
+    saveUserPresets(presets.data);
   };
 
   const onExportClicked = () => {
