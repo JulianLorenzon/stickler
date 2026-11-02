@@ -9,10 +9,10 @@
 
 ---
 
-The [Fichero](https://www.action.com/nl-nl/p/3212141/fichero-labelprinter/) is a cheap Bluetooth label printer sold
-at Action. Its official app asks for 26 permissions, including your advertising ID and ad attribution tracking.
-Stickler talks to the printer directly and only asks for Bluetooth (plus location on Android 11 and older,
-where Android requires it for any Bluetooth scan), and for the camera the first time you scan a code.
+The [Fichero](https://www.action.com/nl-nl/p/3212141/fichero-labelprinter/) is an affordable Bluetooth label printer
+sold at Action. Stickler is an independent app for it that only asks for what it needs: Bluetooth to reach the
+printer (plus location on Android 11 and older, where Android requires it for Bluetooth scans) and the camera when
+you scan a code. It has no internet access, no account and no ads.
 
 ## What it does
 
