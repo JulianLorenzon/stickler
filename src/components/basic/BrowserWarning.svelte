@@ -26,7 +26,7 @@
         {$tr("browser_warning.lines.second")}
       {/if}
     </span>
-    <button class="btn-close btn-sm" aria-label="Dismiss" onclick={dismiss}></button>
+    <button class="btn-close btn-sm" aria-label={$tr("main.dismiss")} onclick={dismiss}></button>
   </div>
 {/if}
 

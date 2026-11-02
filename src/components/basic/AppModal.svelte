@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from "bootstrap/js/dist/modal";
   import { onDestroy, onMount, type Snippet } from "svelte";
+  import { tr } from "$/utils/i18n";
 
   interface Props {
     show: boolean;
@@ -54,7 +55,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h1 class="modal-title fs-5">{title}</h1>
-        <button aria-label="Dismiss" type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <button aria-label={$tr("main.dismiss")} type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
 
       <div class="modal-body">

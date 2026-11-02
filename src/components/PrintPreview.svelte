@@ -801,7 +801,8 @@
         </select>
         <button
           class="btn {postProcessInvert ? 'btn-primary' : 'btn-secondary'}"
-          title="Invert"
+          title={$tr("preview.invert")}
+          aria-label={$tr("preview.invert")}
           onclick={() => {
             postProcessInvert = !postProcessInvert;
             updatePreview();

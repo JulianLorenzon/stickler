@@ -19,9 +19,13 @@ const guessBrowserLanguage = (): SupportedLanguage => {
   }
 };
 
-export const locale = writable<SupportedLanguage>(
-  (localStorage.getItem("locale") as SupportedLanguage) ?? guessBrowserLanguage(),
-);
+/** A language picked in an older version may no longer be offered: then go by the phone's language again */
+const storedLanguage = (): SupportedLanguage | null => {
+  const stored = localStorage.getItem("locale");
+  return stored !== null && stored in langPack ? (stored as SupportedLanguage) : null;
+};
+
+export const locale = writable<SupportedLanguage>(storedLanguage() ?? guessBrowserLanguage());
 
 locale.subscribe((value: SupportedLanguage) => localStorage.setItem("locale", value));
 

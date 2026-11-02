@@ -225,7 +225,7 @@
       <MdIcon icon="fit_screen" />
     </button>
     <button
-      aria-label="Toggle"
+      aria-label={$tr("params.generic.fit.mode")}
       type="button"
       class="btn btn-secondary dropdown-toggle dropdown-toggle-split px-1"
       data-bs-toggle="dropdown"></button>
