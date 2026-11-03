@@ -53,6 +53,10 @@ adb install android/app/build/outputs/apk/debug/app-debug.apk
 
 Or copy the APK to your device and open it to sideload.
 
+The debug build is a separate app, **Stickler dev** (`com.julianlorenzon.stickler.dev`), so it installs next to
+the Play Store version instead of replacing it. Its saved labels are its own: move labels between the two with
+Labels → Export / Import.
+
 ## Release build
 
 Release APKs are signed with your own release key. Create one once, keep it **outside the repo** and back it up

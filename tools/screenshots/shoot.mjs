@@ -39,8 +39,34 @@ for (const s of shots) {
     if (a.select) await page.selectOption(a.select, a.value);
     if (a.click) await page.click(a.click, { force: true });
     if (a.at) await page.mouse.click(a.at[0], a.at[1]);
+    if (a.tap) await page.touchscreen.tap(a.tap[0], a.tap[1]);
+    if (a.tapOn) await page.tap(a.tapOn, { force: true });
     if (a.eval) await page.evaluate(a.eval);
+    if (a.type) await page.keyboard.type(a.type);
+    if (a.press) await page.keyboard.press(a.press);
     if (a.log) console.log(s.name, JSON.stringify(await page.evaluate(a.log)));
+    if (a.viewport) await page.setViewportSize(a.viewport);
+    if (a.drag) {
+      // mouse drag from [x1, y1] to [x2, y2]
+      const [x1, y1, x2, y2] = a.drag;
+      await page.mouse.move(x1, y1);
+      await page.mouse.down();
+      await page.mouse.move(x2, y2, { steps: 12 });
+      await page.mouse.up();
+    }
+    if (a.swipe) {
+      // touch swipe
+      const cdp = await ctx.newCDPSession(page);
+      // [x1, y, x2] sideways, or [x1, y1, x2, y2]
+      const [x1, y1, x2, y2 = y1] = a.swipe;
+      const pt = (x, y) => [{ x, y }];
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pt(x1, y1) });
+      for (let i = 1; i <= 10; i++) {
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pt(x1 + ((x2 - x1) * i) / 10, y1 + ((y2 - y1) * i) / 10) });
+        await page.waitForTimeout(16);
+      }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    }
     await page.waitForTimeout(a.wait ?? 600);
   }
   await page.screenshot({ path: `/out/${s.name}.png`, fullPage: s.full ?? false });

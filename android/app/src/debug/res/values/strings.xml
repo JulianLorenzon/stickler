@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The test build's name on the home screen, so it can't be mixed up with the Play version -->
+<resources>
+    <string name="app_name">Stickler dev</string>
+    <string name="title_activity_main">Stickler dev</string>
+</resources>

@@ -120,6 +120,8 @@ export const AppConfigSchema = z.object({
   rotationSnap: z.number().gte(0).lte(90).optional(),
   /** Print preview shows the bitmap sent to the printer or a simulation of the print */
   previewMode: z.enum(["bitmap", "paper"]).optional(),
+  /** Bottom panel shows all tools in wrapped rows instead of one scrolling row */
+  toolsExpanded: z.boolean().optional(),
 });
 
 export const LastPrinterSchema = z.object({

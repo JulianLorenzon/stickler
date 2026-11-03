@@ -34,14 +34,6 @@
     valueUpdated();
   };
 
-  const setYAlign = (align: fabric.TOriginY) => {
-    // change object origin, but keep position
-    const pos = selectedText.getPointByOrigin("left", "top");
-    selectedText.set({ originY: align });
-    selectedText.setPositionByOrigin(pos, "left", "top");
-    valueUpdated();
-  };
-
   const toggleBold = () => {
     if (selectedText.fontWeight === "bold") {
       selectedText.fontWeight = "normal";
@@ -87,13 +79,6 @@
   const fillChanged = (value: string) => {
     selectedText.set({ fill: value });
     valueUpdated();
-  };
-
-  const splitChanged = (value: string) => {
-    if (selectedText instanceof fabric.Textbox) {
-      selectedText.set({ splitByGrapheme: value === "grapheme" });
-      valueUpdated();
-    }
   };
 
   const backgroundColorChanged = (value: string) => {
@@ -152,37 +137,6 @@
   title={$tr("params.text.align.right")}
   class="btn btn-sm {selectedText.textAlign === 'right' ? 'btn-secondary' : ''}"
   onclick={() => setXAlign("right")}><MdIcon icon="format_align_right" /></button>
-<div class="dropdown">
-  <button class="btn btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" title={$tr("params.text.vorigin")}>
-    {#if selectedText.originY === "top"}
-      <MdIcon icon="vertical_align_top" />
-    {:else if selectedText.originY === "center"}
-      <MdIcon icon="vertical_align_center" />
-    {:else if selectedText.originY === "bottom"}
-      <MdIcon icon="vertical_align_bottom" />
-    {/if}
-  </button>
-  <div class="dropdown-menu p-2">
-    <button
-      class="btn btn-sm {selectedText.originY === 'top' ? 'btn-secondary' : ''}"
-      onclick={() => setYAlign("top")}
-      title={$tr("params.text.vorigin.top")}>
-      <MdIcon icon="vertical_align_top" />
-    </button>
-    <button
-      class="btn btn-sm {selectedText.originY === 'center' ? 'btn-secondary' : ''}"
-      onclick={() => setYAlign("center")}
-      title={$tr("params.text.vorigin.center")}>
-      <MdIcon icon="vertical_align_center" />
-    </button>
-    <button
-      class="btn btn-sm {selectedText.originY === 'bottom' ? 'btn-secondary' : ''}"
-      onclick={() => setYAlign("bottom")}
-      title={$tr("params.text.vorigin.bottom")}>
-      <MdIcon icon="vertical_align_bottom" />
-    </button>
-  </div>
-</div>
 
 <button
   class="btn btn-sm {selectedText.fontWeight === 'bold' ? 'btn-secondary' : ''}"
@@ -229,22 +183,6 @@
   </div>
 </div>
 
-{#if selectedText instanceof fabric.Textbox}
-  <div class="dropdown">
-    <button class="btn btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" title={$tr("params.params.text.split")}>
-      <MdIcon icon="wrap_text" />
-    </button>
-
-    <div class="dropdown-menu arrangement p-2">
-      <div class="input-group input-group-sm flex-nowrap split pb-2">
-        <select class="form-select" value={selectedText.splitByGrapheme ? "grapheme" : "space"} onchange={(e) => splitChanged(e.currentTarget.value)}>
-          <option value="space">{$tr("params.params.text.split.spaces")}</option>
-          <option value="grapheme">{$tr("params.params.text.split.grapheme")}</option>
-        </select>
-      </div>
-    </div>
-  </div>
-{/if}
 
 {#if selectedText instanceof TextboxExt}
   <!-- fixme: Custom property not auto-rendered for some reason -->
@@ -267,8 +205,5 @@
 <style>
   .input-group.color {
     width: 12em;
-  }
-  .input-group.split {
-    width: 14em;
   }
 </style>

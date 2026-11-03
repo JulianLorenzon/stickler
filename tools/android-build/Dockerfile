@@ -21,7 +21,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf
  && $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" >/dev/null \
  && chmod -R a+rwX $ANDROID_HOME
 
-# The container runs as the calling user, so the caches live in a world-writable volume
+# The container runs as the calling user, so the caches live in a world-writable volume.
+# ANDROID_USER_HOME keeps the debug signing key there too: without it every build made a new key, and Android
+# refuses to update an installed debug build signed with a different one ("conflicts with an existing package")
 ENV PATH=$ANDROID_HOME/platform-tools:$PATH \
-    HOME=/cache/home GRADLE_USER_HOME=/cache/gradle npm_config_cache=/cache/npm
+    HOME=/cache/home GRADLE_USER_HOME=/cache/gradle npm_config_cache=/cache/npm \
+    ANDROID_USER_HOME=/cache/home/.android
 RUN mkdir -p /cache/home /cache/gradle /cache/npm && chmod -R 1777 /cache

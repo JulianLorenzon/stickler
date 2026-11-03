@@ -4,10 +4,10 @@
   import type { MaterialIcon } from "$/styles/mdi_icons";
   import { appConfig } from "$/stores";
   import MdIcon from "$/components/basic/MdIcon.svelte";
-  import ObjectPositionControls from "$/components/designer-controls/ObjectPositionControls.svelte";
   import { CanvasUtils } from "$/utils/canvas_utils";
   import { CustomCanvas } from "$/fabric-object/custom_canvas";
   import NumberStepper from "$/components/basic/NumberStepper.svelte";
+  import CropDialog, { type CropRect } from "$/components/designer-controls/CropDialog.svelte";
   import { DEFAULT_ROTATION_SNAP, ROTATION_SNAP_STEPS } from "$/defaults";
 
 
@@ -120,6 +120,42 @@
     valueUpdated();
   };
 
+  let cropOpen = $state(false);
+
+  const labelSize = () => {
+    const canvas = selectedObject.canvas!;
+    return canvas instanceof CustomCanvas ? canvas.getLabelProps().size : { width: canvas.width, height: canvas.height };
+  };
+
+  /**
+   * Show a new part of the photo. It keeps its height on the label (that's what the label limits), shrinks to fit
+   * the label if it got too wide, and stays centered where it was, inside the label.
+   */
+  const applyCrop = (r: CropRect) => {
+    const img = selectedObject as fabric.FabricImage;
+    const label = labelSize();
+    const center = img.getCenterPoint();
+    let scaleY = img.getScaledHeight() / r.h;
+    let scaleX = scaleY * (img.scaleX / img.scaleY);
+    const fit = Math.min(1, label.width / (r.w * scaleX), label.height / (r.h * scaleY));
+    scaleX *= fit;
+    scaleY *= fit;
+
+    img.set({ cropX: r.x, cropY: r.y, width: r.w, height: r.h, scaleX, scaleY });
+    img.setPositionByOrigin(center, "center", "center");
+    img.setCoords();
+
+    const b = img.getBoundingRect();
+    const shift = (pos: number, size: number, max: number) =>
+      size > max ? 0 : pos < 0 ? -pos : pos + size > max ? max - pos - size : 0;
+    const dx = shift(b.left, b.width, label.width);
+    const dy = shift(b.top, b.height, label.height);
+    if (dx || dy) img.set({ left: img.left + dx, top: img.top + dy });
+
+    img.dirty = true;
+    valueUpdated();
+  };
+
   const fitModeChanged = (e: Event & { currentTarget: HTMLSelectElement }) => {
     const fitMode = e.currentTarget.value as "stretch" | "ratio_min" | "ratio_max";
     appConfig.update((v) => ({ ...v, fitMode: fitMode }));
@@ -128,12 +164,18 @@
 
 <input type="hidden" value={editRevision}>
 
-<button class="btn btn-sm btn-secondary" onclick={() => align("center_h")} title={$tr("params.generic.center.horizontal")}>
-  <MdIcon icon="align_horizontal_center" />
-</button>
-<button class="btn btn-sm btn-secondary" onclick={() => align("center_v")} title={$tr("params.generic.center.vertical")}>
-  <MdIcon icon="align_vertical_center" />
-</button>
+{#if selectedObject instanceof fabric.FabricImage}
+  <button class="btn btn-sm btn-secondary" onclick={() => (cropOpen = true)} title={$tr("params.image.crop")}>
+    <MdIcon icon="crop" />
+  </button>
+  {#if cropOpen}
+    <CropDialog
+      bind:show={cropOpen}
+      image={selectedObject}
+      labelAspect={labelSize().width / labelSize().height}
+      onApply={applyCrop} />
+  {/if}
+{/if}
 
 <div class="dropdown">
   <button
@@ -154,8 +196,6 @@
     </div>
   </div>
 </div>
-
-<ObjectPositionControls {selectedObject} />
 
 <div class="dropdown">
   <button
@@ -181,11 +221,11 @@
     </div>
     <div class="rotation-row">
       <button class="btn btn-sm btn-secondary" onclick={() => setAngle(angle - 90)} title="-90°">
-        <MdIcon icon="rotate_left" />
+        <MdIcon icon="rotate_90_degrees_ccw" /> 90°
       </button>
       <button class="btn btn-sm btn-secondary flex-grow-1" onclick={() => setAngle(0)}>0°</button>
       <button class="btn btn-sm btn-secondary" onclick={() => setAngle(angle + 90)} title="+90°">
-        <MdIcon icon="rotate_right" />
+        <MdIcon icon="rotate_90_degrees_cw" /> 90°
       </button>
     </div>
     <div class="rotation-snap-title">{$tr("params.generic.rotation.snap")}</div>

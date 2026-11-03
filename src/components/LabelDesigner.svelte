@@ -42,6 +42,7 @@
   import VectorParamsControls from "$/components/designer-controls/VectorParamsControls.svelte";
   import { CanvasUtils } from "$/utils/canvas_utils";
   import { codeScannerAvailable, scanCode, type ScanResult } from "$/utils/code_scanner";
+  import { animateRowResize, panelDrag, scrollEdges } from "$/utils/tool_panel";
 
   let htmlCanvas: HTMLCanvasElement;
   let workspaceEl: HTMLDivElement;
@@ -54,6 +55,19 @@
   let editRevision = $state<number>(0);
   let printNow = $state<boolean>(false);
   let csvEnabled = $state<boolean>(false);
+  let panelEl: HTMLDivElement;
+  /** The tool row has more tools off to the left / right */
+  let rowMore = $state({ start: false, end: false });
+  const toolsExpanded = $derived($appConfig.toolsExpanded ?? false);
+  const setToolsExpanded = (expanded: boolean) =>
+    animateRowResize(panelEl?.querySelector<HTMLElement>(":scope > .tool-row"), async () => {
+      appConfig.update((v) => ({ ...v, toolsExpanded: expanded }));
+      await tick();
+    });
+  const panelDragOptions = {
+    row: () => panelEl?.querySelector<HTMLElement>(":scope > .tool-row"),
+    onExpand: setToolsExpanded,
+  };
   let previewAfterConnect = false;
   let unsubscribeConnection: (() => void) | undefined;
   let detachPinchZoom: (() => void) | undefined;
@@ -177,6 +191,18 @@
   };
 
   const onObjectPicked = (objectType: OjectType) => {
+    // A photo arrives after the file picker closes; select it and make it an undo step like the other objects
+    if (objectType === "image") {
+      LabelDesignerObjectHelper.addImageWithFilePicker(fabricCanvas!)
+        .then((img) => {
+          fabricCanvas!.setActiveObject(img);
+          fabricCanvas!.requestRenderAll();
+          undo.push(fabricCanvas!, labelProps);
+        })
+        .catch(() => {}); // already shown as a toast
+      return;
+    }
+
     const obj = LabelDesignerObjectHelper.addObject(fabricCanvas!, objectType);
     if (obj !== undefined) {
       fabricCanvas!.setActiveObject(obj);
@@ -248,6 +274,9 @@
     const { clientWidth, clientHeight } = workspaceEl;
     if (clientWidth <= 0 || clientHeight <= 0) return;
     fabricCanvas.setWorkspaceSize(clientWidth, clientHeight);
+    // Resizing clears the canvas and Fabric would only redraw next frame; while the tool panel animates that's
+    // a new resize every frame, so the label vanished until it stopped. Redraw now, before the frame is painted.
+    fabricCanvas.renderAll();
   };
 
   const selectionTitle = (): string => {
@@ -583,9 +612,15 @@
     </button>
   </div>
 
-  <div class="panel">
+  <div class="panel" class:expanded={toolsExpanded} bind:this={panelEl}>
+    <button
+      class="panel-grip"
+      use:panelDrag={panelDragOptions}
+      onclick={() => setToolsExpanded(!toolsExpanded)}
+      title={toolsExpanded ? $tr("editor.tools.collapse") : $tr("editor.tools.expand")}
+      aria-label={toolsExpanded ? $tr("editor.tools.collapse") : $tr("editor.tools.expand")}></button>
     {#if selectedCount > 0}
-      <div class="panel-head">
+      <div class="panel-head" use:panelDrag={panelDragOptions}>
         <span class="panel-title">{selectionTitle()}</span>
         <button class="btn icon-btn text-danger" onclick={deleteSelected} title={$tr("editor.delete")}>
           <MdIcon icon="delete" />
@@ -598,7 +633,7 @@
         </button>
       </div>
 
-      <div class="tool-row props-row">
+      <div class="tool-row props-row" use:scrollEdges={(m) => (rowMore = m)}>
         {#if selectedObject instanceof fabric.IText}
           <TextParamsControls
             part="size"
@@ -631,21 +666,25 @@
             valueUpdated={controlValueUpdated} />
         {/if}
 
-        {#if selectedObject instanceof fabric.IText || selectedObject instanceof QRCode || (selectedObject instanceof Barcode && selectedObject.encoding === "CODE128B")}
+        {#if csvEnabled && (selectedObject instanceof fabric.IText || selectedObject instanceof QRCode || (selectedObject instanceof Barcode && selectedObject.encoding === "CODE128B"))}
           <VariableInsertControl {selectedObject} valueUpdated={controlValueUpdated} />
         {/if}
       </div>
     {:else}
-      <div class="panel-head">
+      <div class="panel-head" use:panelDrag={panelDragOptions}>
         <span class="panel-title">{$tr("editor.objectpicker.title")}</span>
       </div>
-      <div class="tool-row">
+      <div class="tool-row" use:scrollEdges={(m) => (rowMore = m)}>
         <AddObjectBar
           onSubmit={onObjectPicked}
           {onIconPicked}
           {onSvgIconPicked}
           onScan={codeScannerAvailable() ? onScan : undefined} />
       </div>
+    {/if}
+    {#if !toolsExpanded}
+      <div class="row-fade start" class:show={rowMore.start}></div>
+      <div class="row-fade end" class:show={rowMore.end}></div>
     {/if}
   </div>
 
@@ -713,9 +752,80 @@
   }
 
   .panel {
+    position: relative;
     background: var(--surface-1);
     border-top: 1px solid var(--border-standard);
-    padding-top: 0.375rem;
+    padding-top: 0.75rem;
+  }
+
+  /* Tap to show all tools, or drag it (or the header below it) up and down, or sideways to scroll the tools */
+  .panel-grip {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 4rem;
+    height: 1.25rem;
+    margin-left: -2rem;
+    padding: 0;
+    border: none;
+    background: transparent;
+    z-index: 1;
+  }
+
+  .panel-grip::before {
+    content: "";
+    position: absolute;
+    top: 0.375rem;
+    left: 50%;
+    width: 2.25rem;
+    height: 0.25rem;
+    margin-left: -1.125rem;
+    border-radius: 0.125rem;
+    background: var(--border-emphasis);
+  }
+
+  .panel-grip:active::before {
+    background: var(--ink-tertiary);
+  }
+
+  /* Swipes and drags on the header and the grip are ours, not the browser's */
+  .panel-head,
+  .panel-grip {
+    touch-action: none;
+  }
+
+  .panel.expanded > :global(.tool-row) {
+    height: auto;
+    max-height: 45vh;
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  /* Fades over the tool row's edges where more tools are scrolled out of view */
+  .row-fade {
+    position: absolute;
+    bottom: 0;
+    width: 2rem;
+    height: 4.25rem;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .row-fade.show {
+    opacity: 1;
+  }
+
+  .row-fade.start {
+    left: 0;
+    background: linear-gradient(90deg, var(--surface-1), transparent);
+  }
+
+  .row-fade.end {
+    right: 0;
+    background: linear-gradient(270deg, var(--surface-1), transparent);
   }
 
   /* Same height with and without a selection, so selecting doesn't resize the canvas under the finger */
