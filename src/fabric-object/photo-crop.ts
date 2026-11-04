@@ -66,7 +66,24 @@ export const insidePhoto = (r: Rect, iw: number, ih: number, deg: number) => {
   return true;
 };
 
-export const photoCrop = (img: fabric.FabricImage) => img as fabric.FabricImage & PhotoCropProps;
+/** Whether the oval inside the rect (in the turned box) shows only photo; its box's corners may stick out */
+export const ovalInsidePhoto = (r: Rect, iw: number, ih: number, deg: number) => {
+  const e = 0.5;
+  const a = r.w / 2;
+  const b = r.h / 2;
+  const c = toPhoto(r.x + a, r.y + b, iw, ih, deg);
+  // How far the oval reaches along the photo's own axes
+  const cos = Math.cos(deg * RAD);
+  const sin = Math.sin(deg * RAD);
+  const hx = Math.sqrt(a * a * cos * cos + b * b * sin * sin);
+  const hy = Math.sqrt(a * a * sin * sin + b * b * cos * cos);
+  return c.x - hx >= -e && c.y - hy >= -e && c.x + hx <= iw + e && c.y + hy <= ih + e;
+};
+
+export const cropFits = (r: Rect, shape: CropShape, iw: number, ih: number, deg: number) =>
+  shape === "ellipse" ? ovalInsidePhoto(r, iw, ih, deg) : insidePhoto(r, iw, ih, deg);
+
+export const photoCrop =(img: fabric.FabricImage) => img as fabric.FabricImage & PhotoCropProps;
 
 /** Draw turned or oval photos; plain ones keep Fabric's own drawing */
 export const installPhotoCrop = () => {

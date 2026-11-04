@@ -15,7 +15,7 @@
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import type { MaterialIcon } from "$/styles/mdi_icons";
-  import { fromPhoto, insidePhoto, photoCrop, toPhoto, turnedSize } from "$/fabric-object/photo-crop";
+  import { cropFits, fromPhoto, photoCrop, toPhoto, turnedSize } from "$/fabric-object/photo-crop";
 
   interface Props {
     show: boolean;
@@ -89,7 +89,8 @@
 
   // ── fitting the box inside the turned photo ──
 
-  const fits = (r: Rect) => insidePhoto(r, iw, ih, angle);
+  /** A circle only needs the circle itself on the photo, the corners of its box may stick out */
+  const fits = (r: Rect) => cropFits(r, shape, iw, ih, angle);
 
   const lerp = (a: Rect, b: Rect, t: number): Rect => ({
     x: a.x + (b.x - a.x) * t,
@@ -118,6 +119,16 @@
     return furthest({ x: cx, y: cy, w: 0, h: 0 }, full);
   };
 
+  /** The rect of `from`'s size closest to `to` that fits, sliding along edges: x then y, or y then x */
+  const push = (from: Rect, to: Rect) => {
+    const dist = (r: Rect) => Math.hypot(r.x - to.x, r.y - to.y);
+    const xFirst = furthest(from, { ...from, x: to.x });
+    const a = furthest(xFirst, { ...xFirst, y: to.y });
+    const yFirst = furthest(from, { ...from, y: to.y });
+    const b = furthest(yFirst, { ...yFirst, x: to.x });
+    return dist(a) <= dist(b) ? a : b;
+  };
+
   /** Largest rect of the given aspect, as close to the current center as it fits */
   const fitAspect = (a: number) => {
     const cx = rect.x + rect.w / 2;
@@ -139,6 +150,8 @@
     if (p === "whole") fitWhole();
     else if (p === "label") fitAspect(labelAspect);
     else if (p === "square" || p === "circle") fitAspect(1);
+    // Coming from a circle, the box's corners may be off the photo
+    else if (!fits(rect)) rect = around(rect.x + rect.w / 2, rect.y + rect.h / 2, rect.w, rect.h);
   };
 
   // ── turning ──
@@ -241,7 +254,20 @@
         w *= grow;
         h *= grow;
       }
-      rect = furthest(s, at(w, h));
+    }
+
+    if (locked || preset === "circle") {
+      // Grow as far as the photo has room for (the middle has the most), and where the opposite corner would leave
+      // the photo, push the box away from that edge instead of stopping
+      let size = around(box.w / 2, box.h / 2, w, h);
+      if (!locked) {
+        // An oval keeps its shape free: each side stops at the photo on its own
+        const middle = (ww: number, hh: number) => ({ x: box.w / 2 - ww / 2, y: box.h / 2 - hh / 2, w: ww, h: hh });
+        size = furthest(size, middle(w, size.h));
+        size = furthest(size, middle(size.w, h));
+      }
+      const want = at(size.w, size.h);
+      rect = fits(want) ? want : push(size, want);
     } else {
       const wide = furthest(s, at(w, s.h));
       rect = furthest(wide, at(wide.w, h));
