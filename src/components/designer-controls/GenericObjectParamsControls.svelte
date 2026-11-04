@@ -182,6 +182,7 @@
     class="btn btn-sm btn-secondary dropdown-toggle"
     type="button"
     data-bs-toggle="dropdown"
+    data-bs-auto-close="outside"
     title={$tr("params.generic.align")}>
     <MdIcon icon="align_horizontal_left" />
   </button>
