@@ -1,6 +1,7 @@
 import * as fabric from "fabric";
 import type { AppConfig, LabelPreset, LabelProps } from "$/types";
 import { TextboxExt } from "$/fabric-object/textbox-ext";
+import { installPhotoCrop } from "$/fabric-object/photo-crop";
 
 export const configureFabric = () => {
   fabric.config.disableStyleCopyPaste = true;
@@ -13,6 +14,7 @@ export const configureFabric = () => {
     ctx.imageSmoothingQuality = "high";
     renderImage.call(this, ctx);
   };
+  installPhotoCrop();
 
   fabric.Line.prototype.setControlsVisibility({
     tl: false,

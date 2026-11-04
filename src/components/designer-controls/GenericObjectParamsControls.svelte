@@ -7,7 +7,7 @@
   import { CanvasUtils } from "$/utils/canvas_utils";
   import { CustomCanvas } from "$/fabric-object/custom_canvas";
   import NumberStepper from "$/components/basic/NumberStepper.svelte";
-  import CropDialog, { type CropRect } from "$/components/designer-controls/CropDialog.svelte";
+  import CropDialog, { type CropResult } from "$/components/designer-controls/CropDialog.svelte";
   import { DEFAULT_ROTATION_SNAP, ROTATION_SNAP_STEPS } from "$/defaults";
 
 
@@ -127,31 +127,45 @@
     return canvas instanceof CustomCanvas ? canvas.getLabelProps().size : { width: canvas.width, height: canvas.height };
   };
 
+  /** The label's width / height as seen by the photo: turned on its side, the label looks tall */
+  const labelAspectForPhoto = () => {
+    const size = labelSize();
+    const sideways = Math.abs(Math.round(selectedObject.angle / 90)) % 2 === 1;
+    return sideways ? size.height / size.width : size.width / size.height;
+  };
+
   /**
    * Show a new part of the photo. It keeps its height on the label (that's what the label limits), shrinks to fit
-   * the label if it got too wide, and stays centered where it was, inside the label.
+   * the label if it got too big, and stays centered where it was, inside the label.
    */
-  const applyCrop = (r: CropRect) => {
+  const applyCrop = (r: CropResult) => {
     const img = selectedObject as fabric.FabricImage;
     const label = labelSize();
     const center = img.getCenterPoint();
-    let scaleY = img.getScaledHeight() / r.h;
-    let scaleX = scaleY * (img.scaleX / img.scaleY);
-    const fit = Math.min(1, label.width / (r.w * scaleX), label.height / (r.h * scaleY));
-    scaleX *= fit;
-    scaleY *= fit;
+    const scaleY = img.getScaledHeight() / r.h;
+    const scaleX = scaleY * (img.scaleX / img.scaleY);
 
-    img.set({ cropX: r.x, cropY: r.y, width: r.w, height: r.h, scaleX, scaleY });
+    img.set({ cropX: r.x, cropY: r.y, width: r.w, height: r.h, scaleX, scaleY, photoAngle: r.angle, cropShape: r.shape });
     img.setPositionByOrigin(center, "center", "center");
     img.setCoords();
 
-    const b = img.getBoundingRect();
+    // Measured on the label, so a photo turned on the label fits too
+    let b = img.getBoundingRect();
+    const fit = Math.min(1, label.width / b.width, label.height / b.height);
+    if (fit < 1) {
+      img.set({ scaleX: scaleX * fit, scaleY: scaleY * fit });
+      img.setPositionByOrigin(center, "center", "center");
+      img.setCoords();
+      b = img.getBoundingRect();
+    }
+
     const shift = (pos: number, size: number, max: number) =>
       size > max ? 0 : pos < 0 ? -pos : pos + size > max ? max - pos - size : 0;
     const dx = shift(b.left, b.width, label.width);
     const dy = shift(b.top, b.height, label.height);
     if (dx || dy) img.set({ left: img.left + dx, top: img.top + dy });
 
+    img.setCoords();
     img.dirty = true;
     valueUpdated();
   };
@@ -172,7 +186,7 @@
     <CropDialog
       bind:show={cropOpen}
       image={selectedObject}
-      labelAspect={labelSize().width / labelSize().height}
+      labelAspect={labelAspectForPhoto()}
       onApply={applyCrop} />
   {/if}
 {/if}

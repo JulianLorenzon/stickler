@@ -1,9 +1,10 @@
 <script lang="ts" module>
-  export interface CropRect {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
+  import type { CropShape, Rect } from "$/fabric-object/photo-crop";
+
+  export interface CropResult extends Rect {
+    /** Degrees the photo is turned, clockwise */
+    angle: number;
+    shape: CropShape;
   }
 </script>
 
@@ -14,28 +15,31 @@
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import type { MaterialIcon } from "$/styles/mdi_icons";
+  import { fromPhoto, insidePhoto, photoCrop, toPhoto, turnedSize } from "$/fabric-object/photo-crop";
 
   interface Props {
     show: boolean;
     image: fabric.FabricImage;
-    /** Width / height of the label, for the "Label shape" preset */
+    /** Width / height of the label as the photo sees it, for the "Label shape" preset */
     labelAspect: number;
-    onApply: (rect: CropRect) => void;
+    onApply: (result: CropResult) => void;
   }
 
   let { show = $bindable(), image, labelAspect, onApply }: Props = $props();
 
-  type Preset = "label" | "square" | "free" | "whole";
+  type Preset = "label" | "square" | "circle" | "free" | "whole";
 
   const presets: { id: Preset; icon: MaterialIcon; label: TranslationKey }[] = [
     { id: "label", icon: "crop_landscape", label: "crop.preset.label" },
     { id: "square", icon: "crop_square", label: "crop.preset.square" },
+    { id: "circle", icon: "circle", label: "crop.preset.circle" },
     { id: "free", icon: "crop_free", label: "crop.preset.free" },
     { id: "whole", icon: "crop_original", label: "crop.preset.whole" },
   ];
 
   // The dialog is created for one image and closed afterwards, its starting values are read once
   const img = untrack(() => image);
+  const start = photoCrop(img);
 
   /** The uncropped photo (Fabric keeps it when filters replace the element) */
   const source = ((img as unknown as { _originalElement?: CanvasImageSource })._originalElement ??
@@ -43,68 +47,154 @@
   const iw = (source as HTMLImageElement).naturalWidth || source.width;
   const ih = (source as HTMLImageElement).naturalHeight || source.height;
 
-  const startsWhole = img.cropX === 0 && img.cropY === 0 && img.width === iw && img.height === ih;
-  let preset = $state<Preset>(startsWhole ? "whole" : "free");
-  /** Crop in photo pixels */
-  let rect = $state<CropRect>({ x: img.cropX ?? 0, y: img.cropY ?? 0, w: img.width, h: img.height });
+  /** The photo's turn: quarter turns plus straightening (-45…45) */
+  const startAngle = start.photoAngle ?? 0;
+  let quarter = $state((((Math.round(startAngle / 90) * 90) % 360) + 360) % 360);
+  let straighten = $state(startAngle - Math.round(startAngle / 90) * 90);
+  const angle = $derived(quarter + straighten);
+
+  let shape = $state<CropShape>(start.cropShape ?? "rect");
+  const startsWhole = !startAngle && img.cropX === 0 && img.cropY === 0 && img.width === iw && img.height === ih;
+  let preset = $state<Preset>(start.cropShape === "ellipse" ? "circle" : startsWhole ? "whole" : "free");
+  /** Crop in photo pixels, in the box around the turned photo */
+  let rect = $state<Rect>({ x: img.cropX ?? 0, y: img.cropY ?? 0, w: img.width, h: img.height });
 
   let stageW = $state(0);
   let stageH = $state(0);
   let photoCanvas = $state<HTMLCanvasElement>();
 
-  /** Photo pixels to screen pixels, and where the photo sits on the stage */
   /** Room around the photo so the corner handles stay grabbable at its edges */
   const PAD = 16;
-  const k = $derived(stageW > PAD * 2 && stageH > PAD * 2 ? Math.min((stageW - PAD * 2) / iw, (stageH - PAD * 2) / ih) : 0);
-  const ox = $derived((stageW - iw * k) / 2);
-  const oy = $derived((stageH - ih * k) / 2);
+  const box = $derived(turnedSize(iw, ih, angle));
+  /** Photo pixels to screen pixels, and where the turned photo's box sits on the stage */
+  const k = $derived(
+    stageW > PAD * 2 && stageH > PAD * 2 ? Math.min((stageW - PAD * 2) / box.w, (stageH - PAD * 2) / box.h) : 0,
+  );
+  const ox = $derived((stageW - box.w * k) / 2);
+  const oy = $derived((stageH - box.h * k) / 2);
 
   const aspect = $derived(preset === "label" ? labelAspect : preset === "square" ? 1 : undefined);
 
-  // Draw the photo at screen resolution once the stage has a size
+  // Draw the photo once, big enough for any turn; turning and zooming happen in CSS
   $effect(() => {
-    if (!k || !photoCanvas) return;
+    if (!stageW || !stageH || !photoCanvas) return;
     const dpr = window.devicePixelRatio || 1;
-    photoCanvas.width = Math.round(iw * k * dpr);
-    photoCanvas.height = Math.round(ih * k * dpr);
+    const scale = Math.min(1, (Math.max(stageW, stageH) * dpr) / Math.max(iw, ih));
+    photoCanvas.width = Math.round(iw * scale);
+    photoCanvas.height = Math.round(ih * scale);
     const ctx = photoCanvas.getContext("2d")!;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(source, 0, 0, photoCanvas.width, photoCanvas.height);
   });
 
-  /** Smallest crop side: 40 screen px, but never more than the photo */
-  const minSide = () => Math.min(40 / k, iw, ih);
+  // ── fitting the box inside the turned photo ──
 
-  /** Largest rect of the given aspect around the current center, inside the photo */
+  const fits = (r: Rect) => insidePhoto(r, iw, ih, angle);
+
+  const lerp = (a: Rect, b: Rect, t: number): Rect => ({
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+    w: a.w + (b.w - a.w) * t,
+    h: a.h + (b.h - a.h) * t,
+  });
+
+  /** As far from `from` (which fits) towards `to` as still fits */
+  const furthest = (from: Rect, to: Rect) => {
+    if (fits(to)) return to;
+    if (!fits(from)) return from;
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 20; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(lerp(from, to, mid))) lo = mid;
+      else hi = mid;
+    }
+    return lerp(from, to, lo);
+  };
+
+  /** A rect of size w × h around the center point, shrunk until it fits */
+  const around = (cx: number, cy: number, w: number, h: number) => {
+    const full = { x: cx - w / 2, y: cy - h / 2, w, h };
+    return furthest({ x: cx, y: cy, w: 0, h: 0 }, full);
+  };
+
+  /** Largest rect of the given aspect, as close to the current center as it fits */
   const fitAspect = (a: number) => {
     const cx = rect.x + rect.w / 2;
     const cy = rect.y + rect.h / 2;
-    const w = Math.min(iw, ih * a);
-    const h = w / a;
-    rect = {
-      x: Math.min(Math.max(cx - w / 2, 0), iw - w),
-      y: Math.min(Math.max(cy - h / 2, 0), ih - h),
-      w,
-      h,
-    };
+    const w = Math.min(box.w, box.h * a);
+    // The biggest one sits in the middle of the photo, then it slides towards where the box was
+    const middle = around(box.w / 2, box.h / 2, w, w / a);
+    rect = furthest(middle, { ...middle, x: cx - middle.w / 2, y: cy - middle.h / 2 });
+  };
+
+  const fitWhole = () => {
+    if (straighten === 0) rect = { x: 0, y: 0, w: box.w, h: box.h };
+    else fitAspect(quarter % 180 === 0 ? iw / ih : ih / iw);
   };
 
   const pickPreset = (p: Preset) => {
     preset = p;
-    if (p === "whole") {
-      rect = { x: 0, y: 0, w: iw, h: ih };
-    } else if (p === "label") {
-      fitAspect(labelAspect);
-    } else if (p === "square") {
-      fitAspect(1);
-    }
+    shape = p === "circle" ? "ellipse" : "rect";
+    if (p === "whole") fitWhole();
+    else if (p === "label") fitAspect(labelAspect);
+    else if (p === "square" || p === "circle") fitAspect(1);
   };
+
+  // ── turning ──
+
+  /** The box as it was before the slider moved, so sliding back brings it back */
+  let turnFrom: { cx: number; cy: number; w: number; h: number } | undefined;
+
+  const rememberBox = () => {
+    const c = toPhoto(rect.x + rect.w / 2, rect.y + rect.h / 2, iw, ih, angle);
+    turnFrom = { cx: c.x, cy: c.y, w: rect.w, h: rect.h };
+  };
+
+  /** Keep the same spot of the photo in the middle of the box, shrink the box if it no longer fits */
+  const placeAfterTurn = () => {
+    if (!turnFrom) return;
+    const c = fromPhoto(turnFrom.cx, turnFrom.cy, iw, ih, angle);
+    rect = around(c.x, c.y, turnFrom.w, turnFrom.h);
+  };
+
+  const setStraighten = (deg: number) => {
+    if (!turnFrom) rememberBox();
+    // Snap to straight
+    straighten = Math.abs(deg) < 1 ? 0 : deg;
+    placeAfterTurn();
+    if (preset === "whole") fitWhole();
+  };
+
+  const onSlider = (e: Event & { currentTarget: HTMLInputElement }) => setStraighten(Number(e.currentTarget.value));
+  const sliderDone = () => (turnFrom = undefined);
+
+  const resetStraighten = () => {
+    setStraighten(0);
+    turnFrom = undefined;
+  };
+
+  const turnLeft = () => {
+    rememberBox();
+    // The box turns with the photo
+    turnFrom = { ...turnFrom!, w: turnFrom!.h, h: turnFrom!.w };
+    quarter = (quarter + 270) % 360;
+    placeAfterTurn();
+    turnFrom = undefined;
+    if (preset === "whole") fitWhole();
+    else if (preset === "label") fitAspect(labelAspect);
+  };
+
+  const angleText = $derived(`${straighten < 0 ? "−" : ""}${Math.abs(straighten)}°`);
 
   // ── dragging ──
 
   type Corner = "tl" | "tr" | "bl" | "br";
   const corners: Corner[] = ["tl", "tr", "bl", "br"];
-  let drag: { id: number; what: Corner | "move"; startX: number; startY: number; start: CropRect } | undefined;
+  let drag: { id: number; what: Corner | "move"; startX: number; startY: number; start: Rect } | undefined;
+
+  /** Smallest crop side: 40 screen px, but never more than the photo */
+  const minSide = () => Math.min(40 / k, iw, ih);
 
   const onPointerDown = (e: PointerEvent, what: Corner | "move") => {
     if (drag || !e.isPrimary) return;
@@ -123,11 +213,9 @@
     const s = drag.start;
 
     if (drag.what === "move") {
-      rect = {
-        ...s,
-        x: Math.min(Math.max(s.x + dx, 0), iw - s.w),
-        y: Math.min(Math.max(s.y + dy, 0), ih - s.h),
-      };
+      // One direction at a time, so the box slides along an edge instead of stopping at it
+      const moved = furthest(s, { ...s, x: s.x + dx });
+      rect = furthest(moved, { ...moved, y: moved.y + dy });
       return;
     }
 
@@ -136,29 +224,28 @@
     const top = drag.what === "tl" || drag.what === "tr";
     const ax = left ? s.x + s.w : s.x;
     const ay = top ? s.y + s.h : s.y;
-    // Room between the fixed corner and the photo edge
-    const maxW = left ? ax : iw - ax;
-    const maxH = top ? ay : ih - ay;
     const min = minSide();
+    const at = (w: number, h: number): Rect => ({ x: left ? ax - w : ax, y: top ? ay - h : ay, w, h });
 
-    let w = Math.min(Math.max((left ? -dx : dx) + s.w, min), maxW);
-    let h = Math.min(Math.max((top ? -dy : dy) + s.h, min), maxH);
+    let w = Math.max((left ? -dx : dx) + s.w, min);
+    let h = Math.max((top ? -dy : dy) + s.h, min);
+    let locked = aspect;
 
-    if (aspect) {
-      // Follow whichever side the finger moved more, then fit inside the photo
-      if (w / s.w > h / s.h) h = w / aspect;
-      else w = h * aspect;
-      const fit = Math.min(1, maxW / w, maxH / h);
-      w *= fit;
-      h *= fit;
+    if (preset === "circle" && Math.abs(w / h - 1) < 0.08) locked = 1;
+    if (locked) {
+      // Follow whichever side the finger moved more
+      if (w / s.w > h / s.h) h = w / locked;
+      else w = h * locked;
       if (w < min || h < min) {
         const grow = Math.max(min / w, min / h);
-        w = Math.min(w * grow, maxW);
-        h = w / aspect;
+        w *= grow;
+        h *= grow;
       }
+      rect = furthest(s, at(w, h));
+    } else {
+      const wide = furthest(s, at(w, s.h));
+      rect = furthest(wide, at(wide.w, h));
     }
-
-    rect = { x: left ? ax - w : ax, y: top ? ay - h : ay, w, h };
   };
 
   const onPointerUp = (e: PointerEvent) => {
@@ -166,13 +253,14 @@
   };
 
   const done = () => {
-    const r = {
-      x: Math.round(rect.x),
-      y: Math.round(rect.y),
-      w: Math.round(rect.w),
-      h: Math.round(rect.h),
-    };
-    onApply({ ...r, w: Math.max(1, Math.min(r.w, iw - r.x)), h: Math.max(1, Math.min(r.h, ih - r.y)) });
+    let r = rect;
+    // Straight crops on whole pixels, like before
+    if (straighten === 0) {
+      const x = Math.max(0, Math.round(r.x));
+      const y = Math.max(0, Math.round(r.y));
+      r = { x, y, w: Math.max(1, Math.min(Math.round(r.w), Math.round(box.w) - x)), h: Math.max(1, Math.min(Math.round(r.h), Math.round(box.h) - y)) };
+    }
+    onApply({ ...r, angle: ((angle % 360) + 360) % 360, shape });
     // Let the modal animate out, it sets show = false when it's gone
     modalRef?.hide();
   };
@@ -192,13 +280,15 @@
         <canvas
           bind:this={photoCanvas}
           class="crop-photo"
-          style:left="{ox}px"
-          style:top="{oy}px"
+          style:left="{stageW / 2 - (iw * k) / 2}px"
+          style:top="{stageH / 2 - (ih * k) / 2}px"
           style:width="{iw * k}px"
-          style:height="{ih * k}px"></canvas>
+          style:height="{ih * k}px"
+          style:transform={angle ? `rotate(${angle}deg)` : undefined}></canvas>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="crop-box"
+          class:round={shape === "ellipse"}
           style:left="{ox + rect.x * k}px"
           style:top="{oy + rect.y * k}px"
           style:width="{rect.w * k}px"
@@ -222,6 +312,30 @@
     </div>
 
     {#snippet footer()}
+      <div class="crop-turn">
+        <button class="btn btn-secondary turn-btn" onclick={turnLeft} title={$tr("crop.turn")}>
+          <MdIcon icon="rotate_90_degrees_ccw" />
+        </button>
+        <div class="straighten">
+          <input
+            type="range"
+            class="form-range"
+            min="-45"
+            max="45"
+            step="0.5"
+            value={straighten}
+            aria-label={$tr("crop.straighten")}
+            oninput={onSlider}
+            onchange={sliderDone} />
+        </div>
+        <button
+          class="btn btn-secondary angle-btn"
+          class:straight={straighten === 0}
+          onclick={resetStraighten}
+          title={$tr("crop.straighten.reset")}>
+          {angleText}
+        </button>
+      </div>
       <div class="crop-presets">
         {#each presets as p (p.id)}
           <button
@@ -232,7 +346,7 @@
           </button>
         {/each}
       </div>
-      <div class="crop-hint">{$tr("crop.hint")}</div>
+      <div class="crop-hint">{$tr(shape === "ellipse" ? "crop.hint.circle" : "crop.hint")}</div>
       <button class="btn btn-primary btn-lg w-100" onclick={done}>{$tr("editor.selection.done")}</button>
     {/snippet}
   </AppModal>
@@ -267,6 +381,27 @@
   .crop-photo {
     position: absolute;
     display: block;
+  }
+
+  /* Oval crop: the box's corners show what Free would keep, dimmed */
+  .crop-box.round {
+    border-radius: 50%;
+    outline: none;
+    box-shadow:
+      0 0 0 2px #fff,
+      0 0 0 200vmax rgba(0, 0, 0, 0.6);
+  }
+
+  .crop-box.round::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    outline: 1px dashed rgba(255, 255, 255, 0.5);
+    pointer-events: none;
+  }
+
+  .crop-box.round .crop-grid {
+    border-radius: 50%;
   }
 
   .crop-box {
@@ -351,7 +486,7 @@
 
   .crop-presets {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 0.5rem;
     width: 100%;
   }
@@ -369,6 +504,76 @@
 
   .crop-presets .btn :global(.mdi) {
     vertical-align: 0;
+  }
+
+  .crop-turn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .turn-btn {
+    flex: none;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+  }
+
+  .angle-btn {
+    flex: none;
+    min-width: 3.75rem;
+    height: 2.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Nothing to reset: just the readout */
+  .angle-btn.straight {
+    color: var(--ink-tertiary);
+  }
+
+  /* A tick every 5°, a longer one at 0 */
+  .straighten {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    height: 2.75rem;
+  }
+
+  .straighten::before {
+    content: "";
+    position: absolute;
+    left: calc(0.5rem - 0.5px);
+    right: calc(0.5rem - 0.5px);
+    top: 50%;
+    height: 0.75rem;
+    margin-top: -0.375rem;
+    background: linear-gradient(90deg, var(--ink-tertiary) 0 1px, transparent 1px) 0 0 / calc((100% - 1px) / 18) 100% repeat-x;
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .straighten::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 2px;
+    height: 1.25rem;
+    margin: -0.625rem 0 0 -1px;
+    background: var(--ink-primary);
+    pointer-events: none;
+  }
+
+  .straighten .form-range {
+    position: relative;
+    z-index: 1;
+    height: 2.75rem;
+  }
+
+  .straighten .form-range::-webkit-slider-runnable-track {
+    background: transparent;
   }
 
   .crop-hint {
