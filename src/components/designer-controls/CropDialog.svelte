@@ -15,7 +15,7 @@
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import type { MaterialIcon } from "$/styles/mdi_icons";
-  import { cropFits, fromPhoto, photoCrop, toPhoto, turnedSize } from "$/fabric-object/photo-crop";
+  import { cropFits, fromPhoto, nearestFit, photoCrop, toPhoto, turnedSize } from "$/fabric-object/photo-crop";
 
   interface Props {
     show: boolean;
@@ -119,15 +119,8 @@
     return furthest({ x: cx, y: cy, w: 0, h: 0 }, full);
   };
 
-  /** The rect of `from`'s size closest to `to` that fits, sliding along edges: x then y, or y then x */
-  const push = (from: Rect, to: Rect) => {
-    const dist = (r: Rect) => Math.hypot(r.x - to.x, r.y - to.y);
-    const xFirst = furthest(from, { ...from, x: to.x });
-    const a = furthest(xFirst, { ...xFirst, y: to.y });
-    const yFirst = furthest(from, { ...from, y: to.y });
-    const b = furthest(yFirst, { ...yFirst, x: to.x });
-    return dist(a) <= dist(b) ? a : b;
-  };
+  /** The same box moved as close to `r` as fits */
+  const nearest = (r: Rect) => nearestFit(r, shape, iw, ih, angle);
 
   /** Largest rect of the given aspect, as close to the current center as it fits */
   const fitAspect = (a: number) => {
@@ -136,7 +129,7 @@
     const w = Math.min(box.w, box.h * a);
     // The biggest one sits in the middle of the photo, then it slides towards where the box was
     const middle = around(box.w / 2, box.h / 2, w, w / a);
-    rect = furthest(middle, { ...middle, x: cx - middle.w / 2, y: cy - middle.h / 2 });
+    rect = nearest({ ...middle, x: cx - middle.w / 2, y: cy - middle.h / 2 });
   };
 
   const fitWhole = () => {
@@ -226,9 +219,8 @@
     const s = drag.start;
 
     if (drag.what === "move") {
-      // One direction at a time, so the box slides along an edge instead of stopping at it
-      const moved = furthest(s, { ...s, x: s.x + dx });
-      rect = furthest(moved, { ...moved, y: moved.y + dy });
+      // Follows the finger as far as it can and slides along edges, slanted ones too
+      rect = nearest({ ...s, x: s.x + dx, y: s.y + dy });
       return;
     }
 
@@ -254,20 +246,7 @@
         w *= grow;
         h *= grow;
       }
-    }
-
-    if (locked || preset === "circle") {
-      // Grow as far as the photo has room for (the middle has the most), and where the opposite corner would leave
-      // the photo, push the box away from that edge instead of stopping
-      let size = around(box.w / 2, box.h / 2, w, h);
-      if (!locked) {
-        // An oval keeps its shape free: each side stops at the photo on its own
-        const middle = (ww: number, hh: number) => ({ x: box.w / 2 - ww / 2, y: box.h / 2 - hh / 2, w: ww, h: hh });
-        size = furthest(size, middle(w, size.h));
-        size = furthest(size, middle(size.w, h));
-      }
-      const want = at(size.w, size.h);
-      rect = fits(want) ? want : push(size, want);
+      rect = furthest(s, at(w, h));
     } else {
       const wide = furthest(s, at(w, s.h));
       rect = furthest(wide, at(wide.w, h));

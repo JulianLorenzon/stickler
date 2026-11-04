@@ -51,39 +51,38 @@ export const fromPhoto = (x: number, y: number, iw: number, ih: number, deg: num
   return { x: dx * c - dy * s + box.w / 2, y: dx * s + dy * c + box.h / 2 };
 };
 
-/** Whether the whole rect (in the turned box) shows photo, no empty corners. Half a pixel of slack for rounding */
-export const insidePhoto = (r: Rect, iw: number, ih: number, deg: number) => {
-  const e = 0.5;
-  for (const [x, y] of [
-    [r.x, r.y],
-    [r.x + r.w, r.y],
-    [r.x, r.y + r.h],
-    [r.x + r.w, r.y + r.h],
-  ]) {
-    const p = toPhoto(x, y, iw, ih, deg);
-    if (p.x < -e || p.y < -e || p.x > iw + e || p.y > ih + e) return false;
-  }
-  return true;
+/** How far the crop reaches from its center along the photo's own axes. An oval reaches less than its box */
+export const reach = (w: number, h: number, shape: CropShape, deg: number) => {
+  const c = Math.abs(Math.cos(deg * RAD));
+  const s = Math.abs(Math.sin(deg * RAD));
+  const a = w / 2;
+  const b = h / 2;
+  return shape === "ellipse"
+    ? { x: Math.sqrt(a * a * c * c + b * b * s * s), y: Math.sqrt(a * a * s * s + b * b * c * c) }
+    : { x: a * c + b * s, y: a * s + b * c };
 };
 
-/** Whether the oval inside the rect (in the turned box) shows only photo; its box's corners may stick out */
-export const ovalInsidePhoto = (r: Rect, iw: number, ih: number, deg: number) => {
+/** Whether the crop (in the turned box) shows only photo. Half a pixel of slack for rounding */
+export const cropFits = (r: Rect, shape: CropShape, iw: number, ih: number, deg: number) => {
   const e = 0.5;
-  const a = r.w / 2;
-  const b = r.h / 2;
-  const c = toPhoto(r.x + a, r.y + b, iw, ih, deg);
-  // How far the oval reaches along the photo's own axes
-  const cos = Math.cos(deg * RAD);
-  const sin = Math.sin(deg * RAD);
-  const hx = Math.sqrt(a * a * cos * cos + b * b * sin * sin);
-  const hy = Math.sqrt(a * a * sin * sin + b * b * cos * cos);
-  return c.x - hx >= -e && c.y - hy >= -e && c.x + hx <= iw + e && c.y + hy <= ih + e;
+  const c = toPhoto(r.x + r.w / 2, r.y + r.h / 2, iw, ih, deg);
+  const h = reach(r.w, r.h, shape, deg);
+  return c.x - h.x >= -e && c.y - h.y >= -e && c.x + h.x <= iw + e && c.y + h.y <= ih + e;
 };
 
-export const cropFits = (r: Rect, shape: CropShape, iw: number, ih: number, deg: number) =>
-  shape === "ellipse" ? ovalInsidePhoto(r, iw, ih, deg) : insidePhoto(r, iw, ih, deg);
+/**
+ * The crop of the same size nearest to `r` that fits. Seen from the photo, the room its center has is a plain
+ * rectangle, so clamping to it finds the nearest spot exactly: the crop slides along edges, slanted ones too
+ */
+export const nearestFit = (r: Rect, shape: CropShape, iw: number, ih: number, deg: number): Rect => {
+  const c = toPhoto(r.x + r.w / 2, r.y + r.h / 2, iw, ih, deg);
+  const h = reach(r.w, r.h, shape, deg);
+  const clamp = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : Math.min(Math.max(v, lo), hi));
+  const q = fromPhoto(clamp(c.x, h.x, iw - h.x), clamp(c.y, h.y, ih - h.y), iw, ih, deg);
+  return { ...r, x: q.x - r.w / 2, y: q.y - r.h / 2 };
+};
 
-export const photoCrop =(img: fabric.FabricImage) => img as fabric.FabricImage & PhotoCropProps;
+export const photoCrop = (img: fabric.FabricImage) => img as fabric.FabricImage & PhotoCropProps;
 
 /** Draw turned or oval photos; plain ones keep Fabric's own drawing */
 export const installPhotoCrop = () => {
