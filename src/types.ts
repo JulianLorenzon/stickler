@@ -140,6 +140,16 @@ export const LastPrinterSchema = z.object({
   autoConnect: z.boolean(),
 });
 
+/** A printer connected before, for one-tap and automatic reconnecting (native only) */
+export const KnownPrinterSchema = z.object({
+  /** MAC address on Android */
+  deviceId: z.string(),
+  name: z.string(),
+  driver: z.enum(["d11s", "mxw01"]).optional(),
+  /** Last connected, ms since 1970 */
+  lastUsed: z.number(),
+});
+
 export const UserIconSchema = z.object({
   name: z.string(),
   data: z.string(),
@@ -165,3 +175,4 @@ export type AppConfig = z.infer<typeof AppConfigSchema>;
 export type UserFont = z.infer<typeof UserFontSchema>;
 export type LastPrinter = z.infer<typeof LastPrinterSchema>;
 export type PrinterId = z.infer<typeof PrinterIdSchema>;
+export type KnownPrinter = z.infer<typeof KnownPrinterSchema>;

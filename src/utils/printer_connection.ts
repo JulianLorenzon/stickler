@@ -1,6 +1,7 @@
 import { get } from "svelte/store";
 import { Utils, driverForName } from "$/lib/printer";
-import { automation, connectionState, initClient, lastPrinter, printerClient } from "$/stores";
+import type { KnownPrinter } from "$/types";
+import { automation, autoReconnect, connectionState, initClient, knownPrinters, printerClient, printerMeta } from "$/stores";
 import { Toasts } from "$/utils/toasts";
 
 export type FoundPrinter = { deviceId: string; name: string; rssi?: number };
@@ -54,15 +55,28 @@ export const connectNative = async (printer: FoundPrinter, opts: { silent?: bool
     return false;
   }
 
-  const prev = get(lastPrinter);
-  lastPrinter.set({
-    deviceId: printer.deviceId,
-    name: printer.name,
-    autoConnect: prev?.deviceId === printer.deviceId ? prev.autoConnect : true,
-  });
-
+  rememberPrinter(printer);
   return true;
 };
+
+/** Add or update a printer in the known printers list, as the most recently used */
+const rememberPrinter = (printer: FoundPrinter) => {
+  const list = get(knownPrinters);
+  const prev = list.find((p) => p.deviceId === printer.deviceId);
+  // Automatic connects only know the address; keep the real name from before
+  const name = printer.name && printer.name !== printer.deviceId ? printer.name : (prev?.name ?? printer.name);
+  knownPrinters.set([
+    { deviceId: printer.deviceId, name, driver: get(printerMeta)?.driver ?? prev?.driver, lastUsed: Date.now() },
+    ...list.filter((p) => p.deviceId !== printer.deviceId),
+  ]);
+};
+
+export const forgetPrinter = (deviceId: string) => {
+  knownPrinters.set(get(knownPrinters).filter((p) => p.deviceId !== deviceId));
+};
+
+/** Known printers, most recently used first */
+export const knownByRecency = (list: KnownPrinter[]): KnownPrinter[] => [...list].sort((a, b) => b.lastUsed - a.lastUsed);
 
 let scanStopTimer: ReturnType<typeof setTimeout> | undefined;
 let scanning = false;
@@ -75,13 +89,14 @@ export const startScan = async (
   onFound: (printer: FoundPrinter) => void,
   onStopped: () => void,
   durationMs: number = 12_000,
+  opts: { silent?: boolean } = {},
 ): Promise<boolean> => {
   if (scanning) await stopScan();
 
   try {
     await ensureBleReady();
   } catch (e) {
-    Toasts.error(e);
+    if (!opts.silent) Toasts.error(e);
     return false;
   }
 
@@ -94,7 +109,7 @@ export const startScan = async (
       onFound({ deviceId: result.device.deviceId, name, rssi: result.rssi });
     });
   } catch (e) {
-    Toasts.error(e);
+    if (!opts.silent) Toasts.error(e);
     return false;
   }
 
@@ -115,7 +130,13 @@ export const stopScan = async (): Promise<void> => {
   await BleClient.stopLEScan().catch(() => {});
 };
 
-/** Native only: silently reconnect to the last used printer on app start. */
+/** How long the app-start scan looks for known printers */
+const AUTO_CONNECT_SCAN_MS = 4000;
+
+/**
+ * Native only: on app start, silently connect to a known printer. With one known printer, connect to it directly;
+ * with several, scan briefly and take the most recently used one that is switched on. Only known addresses are used.
+ */
 export const autoConnectOnLaunch = async (): Promise<void> => {
   if (!Utils.getAvailableTransports().capacitorBle || get(connectionState) !== "disconnected") return;
 
@@ -125,10 +146,39 @@ export const autoConnectOnLaunch = async (): Promise<void> => {
     return;
   }
 
-  const last = get(lastPrinter);
-  if (last?.autoConnect) {
-    await connectNative(last, { silent: true });
+  const known = knownByRecency(get(knownPrinters));
+  if (!get(autoReconnect) || known.length === 0) return;
+  if (known.length === 1) {
+    await connectNative(known[0], { silent: true });
+    return;
   }
+
+  const seen = new Set<string>();
+  const pick = await new Promise<KnownPrinter | undefined>((resolve) => {
+    let done = false;
+    const finish = (p: KnownPrinter | undefined) => {
+      if (done) return;
+      done = true;
+      resolve(p);
+    };
+    // In case another scan (the printer sheet) takes over and this one never reports its end
+    setTimeout(() => finish(known.find((k) => seen.has(k.deviceId))), AUTO_CONNECT_SCAN_MS + 1000);
+    startScan(
+      (found) => {
+        if (!known.some((k) => k.deviceId === found.deviceId)) return;
+        seen.add(found.deviceId);
+        // The most recently used one: no need to wait for the others
+        if (found.deviceId === known[0].deviceId) finish(known[0]);
+      },
+      () => finish(known.find((k) => seen.has(k.deviceId))),
+      AUTO_CONNECT_SCAN_MS,
+      { silent: true },
+    ).then((ok) => {
+      if (!ok) finish(undefined);
+    });
+  });
+  if (pick) await stopScan();
+  if (pick && get(connectionState) === "disconnected") await connectNative(pick, { silent: true });
 };
 
 /** Signal strength 0..3 for display */

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { Utils } from "$/lib/printer";
+  import { Utils, driverById } from "$/lib/printer";
+  import type { KnownPrinter } from "$/types";
   import {
     printerClient,
     connectedPrinterName,
@@ -8,7 +9,8 @@
     heartbeatData,
     printerInfo,
     printerMeta,
-    lastPrinter,
+    knownPrinters,
+    autoReconnect,
   } from "$/stores";
   import { tr } from "$/utils/i18n";
   import AppModal from "$/components/basic/AppModal.svelte";
@@ -17,6 +19,8 @@
   import {
     connectNative,
     connectWebBluetooth,
+    forgetPrinter,
+    knownByRecency,
     signalLevel,
     startScan,
     stopScan,
@@ -74,14 +78,16 @@
     $printerClient.disconnect();
   };
 
-  const forget = () => {
-    lastPrinter.set(null);
+  const known = $derived(knownByRecency($knownPrinters));
+
+  /** "Fichero D11s · " before the address, unless the name already says it */
+  const modelLabel = (p: KnownPrinter): string => {
+    const model = p.driver ? driverById(p.driver).displayName : "";
+    return model && model !== p.name ? `${model} · ` : "";
   };
 
-  const toggleAutoConnect = (e: Event) => {
-    if ($lastPrinter) {
-      lastPrinter.set({ ...$lastPrinter, autoConnect: (e.currentTarget as HTMLInputElement).checked });
-    }
+  const onForget = (p: KnownPrinter) => {
+    if (confirm(`${$tr("connector.forget")} ${p.name}?`)) forgetPrinter(p.deviceId);
   };
 
   const signalIcon = (rssi?: number): MaterialIcon => {
@@ -149,6 +155,8 @@
   };
 
   const sortedFound = $derived([...found].sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999)));
+  /** Nearby printers that aren't in the known list (those show their signal there) */
+  const nearbyNew = $derived(sortedFound.filter((f) => !$knownPrinters.some((k) => k.deviceId === f.deviceId)));
 
   onMount(() => {
     if (transports.capacitorBle && $connectionState === "disconnected") {
@@ -177,15 +185,14 @@
       {/if}
     </div>
 
-    {#if transports.capacitorBle && $lastPrinter}
+    {#if transports.capacitorBle && known.length > 0}
       <div class="form-check form-switch mt-3">
         <input
           class="form-check-input"
           type="checkbox"
           role="switch"
           id="autoConnect"
-          checked={$lastPrinter.autoConnect}
-          onchange={toggleAutoConnect} />
+          bind:checked={$autoReconnect} />
         <label class="form-check-label" for="autoConnect">{$tr("connector.autoconnect")}</label>
       </div>
     {/if}
@@ -266,39 +273,44 @@
       </div>
     </details>
   {:else if transports.capacitorBle}
-    {#if $lastPrinter}
-      <div class="section-label">{$tr("connector.last_used")}</div>
-      <div class="printer-card">
-        <div class="printer-avatar"><MdIcon icon="print" /></div>
-        <div class="flex-grow-1 min-w-0">
-          <div class="fw-semibold text-truncate">{$lastPrinter.name}</div>
-          <div class="small text-secondary text-truncate">{$lastPrinter.deviceId}</div>
-        </div>
-        <button
-          class="btn btn-primary"
-          disabled={connecting}
-          onclick={() => $lastPrinter && connectTo($lastPrinter)}>
-          {#if connectingId === $lastPrinter.deviceId}
-            <span class="spinner-border spinner-border-sm"></span>
-          {:else}
-            {$tr("connector.connect")}
-          {/if}
-        </button>
+    {#if known.length > 0}
+      <div class="section-label">{$tr("connector.known")}</div>
+      <div class="device-list">
+        {#each known as p (p.deviceId)}
+          {@const nearby = found.find((f) => f.deviceId === p.deviceId)}
+          <div class="known-row">
+            <button class="device-row flex-grow-1" disabled={connecting} onclick={() => connectTo(p)}>
+              <MdIcon icon="print" class="text-secondary" />
+              <span class="flex-grow-1 text-start min-w-0">
+                <span class="d-block text-truncate">{p.name}</span>
+                <span class="d-block small text-secondary text-truncate">
+                  {modelLabel(p)}{p.deviceId}
+                </span>
+              </span>
+              {#if connectingId === p.deviceId}
+                <span class="spinner-border spinner-border-sm text-primary"></span>
+              {:else if nearby}
+                <MdIcon icon={signalIcon(nearby.rssi)} class="signal signal-{signalLevel(nearby.rssi)}" />
+              {/if}
+            </button>
+            <button
+              class="btn btn-link text-secondary forget-btn"
+              onclick={() => onForget(p)}
+              title={$tr("connector.forget")}
+              aria-label={`${$tr("connector.forget")} ${p.name}`}>
+              <MdIcon icon="close" />
+            </button>
+          </div>
+        {/each}
       </div>
-      <div class="d-flex align-items-center mt-2 gap-2">
-        <div class="form-check form-switch mb-0">
-          <input
-            class="form-check-input"
-            type="checkbox"
-            role="switch"
-            id="autoConnect"
-            checked={$lastPrinter.autoConnect}
-            onchange={toggleAutoConnect} />
-          <label class="form-check-label small" for="autoConnect">{$tr("connector.autoconnect")}</label>
-        </div>
-        <button class="btn btn-sm btn-link text-secondary ms-auto" onclick={forget}>
-          {$tr("connector.forget")}
-        </button>
+      <div class="form-check form-switch mt-2">
+        <input
+          class="form-check-input"
+          type="checkbox"
+          role="switch"
+          id="autoConnect"
+          bind:checked={$autoReconnect} />
+        <label class="form-check-label small" for="autoConnect">{$tr("connector.autoconnect")}</label>
       </div>
     {/if}
 
@@ -316,7 +328,7 @@
     </div>
 
     <div class="device-list">
-      {#each sortedFound as device (device.deviceId)}
+      {#each nearbyNew as device (device.deviceId)}
         <button class="device-row" disabled={connecting} onclick={() => connectTo(device)}>
           <MdIcon icon="print" class="text-secondary" />
           <span class="flex-grow-1 text-start text-truncate">{device.name}</span>
@@ -328,7 +340,9 @@
         </button>
       {:else}
         <div class="empty-state">
-          {#if isScanning}
+          {#if found.length > 0}
+            {$tr("connector.scan.only_known")}
+          {:else if isScanning}
             {$tr("connector.scan.searching")}
           {:else}
             {$tr("connector.scan.none")}
@@ -359,6 +373,23 @@
 </AppModal>
 
 <style>
+  .known-row {
+    display: flex;
+    align-items: stretch;
+    background: var(--surface-2);
+  }
+
+  .known-row + .known-row {
+    border-top: 1px solid var(--border-standard);
+  }
+
+  .forget-btn {
+    text-decoration: none;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   .auto-off {
     display: flex;
     align-items: center;

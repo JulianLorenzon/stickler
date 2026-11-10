@@ -5,8 +5,10 @@ import {
   UserFontSchema,
   UserIconSchema,
   LastPrinterSchema,
+  KnownPrinterSchema,
   PrinterIdSchema,
   type LastPrinter,
+  type KnownPrinter,
   type PrinterId,
   type CsvParams,
   type UserFont,
@@ -43,8 +45,27 @@ export const heartbeatData = writable<HeartbeatData>();
 export const printerInfo = writable<PrinterInfo>();
 export const printerMeta = writable<PrinterModelMeta | undefined>();
 export const heartbeatFails = writable<number>(0);
-/** Last printer connected via native BLE, used for one-tap / automatic reconnect */
-export const lastPrinter = writablePersisted<LastPrinter | null>("last_printer", LastPrinterSchema.nullable(), null);
+/** Single "last printer" of earlier versions; only read to fill knownPrinters */
+const legacyLastPrinter = (): LastPrinter | null => {
+  try {
+    return LocalStoragePersistence.loadAndValidateObject("last_printer", LastPrinterSchema) ?? null;
+  } catch {
+    return null;
+  }
+};
+
+/** Printers connected before via native BLE, for one-tap and automatic reconnecting */
+export const knownPrinters = writablePersisted<KnownPrinter[]>(
+  "known_printers",
+  z.array(KnownPrinterSchema),
+  (() => {
+    const last = legacyLastPrinter();
+    return last ? [{ deviceId: last.deviceId, name: last.name, lastUsed: 0 }] : [];
+  })(),
+);
+
+/** Connect to a known printer when the app opens (native only) */
+export const autoReconnect = writablePersisted<boolean>("auto_reconnect", z.boolean(), legacyLastPrinter()?.autoConnect ?? true);
 /**
  * Printer the label sizes are shown for: the connected one, else the last one connected or picked in the size menu
  */
