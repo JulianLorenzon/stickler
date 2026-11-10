@@ -25,7 +25,13 @@
           setTimeout(() => reply(scanCb, { device: { deviceId: "DC:0D:30:AB:CD:EF", name: "FICHERO_ABCD" }, rssi: -82 }), 300);
           return;
         }
-        if (m.methodName === "connect") { window.__connectCalls = (window.__connectCalls || 0) + 1; return; } // keep "connecting" spinner
+        if (m.methodName === "connect") {
+          window.__connectCalls = (window.__connectCalls || 0) + 1;
+          // Shots that set window.__stubConnect get a connection (the printer never answers commands);
+          // otherwise the "connecting" spinner stays
+          if (window.__stubConnect) return reply(m, {});
+          return;
+        }
         return reply(m, {});
       }
     },

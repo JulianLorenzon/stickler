@@ -9,6 +9,7 @@
     heartbeatData,
     printerInfo,
     printerMeta,
+    connectedDeviceId,
     knownPrinters,
     autoReconnect,
   } from "$/stores";
@@ -79,6 +80,13 @@
   };
 
   const known = $derived(knownByRecency($knownPrinters));
+  /** Known printers other than the connected one */
+  const others = $derived(known.filter((p) => p.deviceId !== $connectedDeviceId));
+
+  const switchTo = async (p: KnownPrinter) => {
+    $printerClient.disconnect();
+    await connectTo(p);
+  };
 
   /** "Fichero D11s · " before the address, unless the name already says it */
   const modelLabel = (p: KnownPrinter): string => {
@@ -223,6 +231,30 @@
       <MdIcon icon="bluetooth_disabled" />
       {$tr("connector.disconnect")}
     </button>
+
+    {#if transports.capacitorBle && others.length > 0}
+      <div class="section-label mt-3">{$tr("connector.known.other")}</div>
+      <div class="device-list">
+        {#each others as p (p.deviceId)}
+          <div class="known-row">
+            <div class="device-row flex-grow-1">
+              <MdIcon icon="print" class="text-secondary" />
+              <span class="flex-grow-1 text-start min-w-0">
+                <span class="d-block text-truncate">{p.name}</span>
+                <span class="d-block small text-secondary text-truncate">{modelLabel(p)}{p.deviceId}</span>
+              </span>
+            </div>
+            <button class="btn btn-link switch-btn" disabled={connectingId !== undefined} onclick={() => switchTo(p)}>
+              {#if connectingId === p.deviceId}
+                <span class="spinner-border spinner-border-sm"></span>
+              {:else}
+                {$tr("connector.switch")}
+              {/if}
+            </button>
+          </div>
+        {/each}
+      </div>
+    {/if}
 
     <details class="advanced mt-3">
       <summary>{$tr("connector.details")}</summary>
@@ -381,6 +413,12 @@
 
   .known-row + .known-row {
     border-top: 1px solid var(--border-standard);
+  }
+
+  .switch-btn {
+    text-decoration: none;
+    min-width: 5.5rem;
+    font-weight: 600;
   }
 
   .forget-btn {

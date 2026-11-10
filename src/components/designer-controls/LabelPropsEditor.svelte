@@ -67,7 +67,10 @@
 
   let connected = $derived($connectionState === "connected" && $printerMeta !== undefined);
   /** Printer the sizes are for: the connected one, else the last one used or picked here */
-  let printer = $derived<PrinterId>(connected && $printerMeta ? $printerMeta.driver : $designPrinter);
+  /** Printer the sizes are shown for: follows the connected printer when it connects, but can be switched */
+  let printer = $derived<PrinterId>($designPrinter);
+  /** Connected to a printer other than the one whose sizes are shown */
+  let otherThanConnected = $derived(connected && $printerMeta !== undefined && $printerMeta.driver !== printer);
   let continuous = $derived(printer === "mxw01");
 
   const printheadDots = (): number => driverById(printer).raster.printheadPx;
@@ -359,12 +362,18 @@
           <button
             class="btn {printer === d.id ? 'btn-primary' : 'btn-outline-secondary'}"
             aria-pressed={printer === d.id}
-            disabled={connected && printer !== d.id}
             onclick={() => designPrinter.set(d.id)}>{d.displayName}</button>
         {/each}
       </div>
-      {#if connected}
-        <div class="form-text mb-3">{$tr("params.label.printer.connected")}</div>
+      {#if otherThanConnected && $printerMeta}
+        <div class="other-printer-note mb-3">
+          <MdIcon icon="info" />
+          <span>
+            {$tr("params.label.printer.other")
+              .replace("{connected}", driverById($printerMeta.driver).displayName)
+              .replace("{selected}", driverById(printer).displayName)}
+          </span>
+        </div>
       {/if}
 
       <div class="section-title">{$tr(continuous ? "params.label.rolls.wide" : "params.label.rolls")}</div>
@@ -644,6 +653,14 @@
 
   .printer-switch .btn {
     min-height: 44px;
+  }
+
+  .other-printer-note {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    font-size: 0.875rem;
+    color: var(--status-warn);
   }
 
   .auto-length-check .form-check-input {

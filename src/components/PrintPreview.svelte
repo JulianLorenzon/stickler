@@ -24,6 +24,7 @@
     type PrintTaskName,
     AbstractPrintTask,
     Utils,
+    driverById,
   } from "$/lib/printer";
   import type { LabelProps, PostProcessType, FabricJson, PreviewProps, PreviewPropsOffset } from "$/types";
   import ParamLockButton from "$/components/basic/ParamLockButton.svelte";
@@ -36,7 +37,7 @@
   import { CustomCanvas } from "$/fabric-object/custom_canvas";
   import { FileUtils } from "$/utils/file_utils";
   import AppModal from "$/components/basic/AppModal.svelte";
-  import { DOTS_PER_MM, OBJECT_DEFAULTS_TEXT } from "$/defaults";
+  import { DOTS_PER_MM, OBJECT_DEFAULTS_TEXT, printerOf } from "$/defaults";
 
   interface Props {
     labelProps: LabelProps;
@@ -453,6 +454,10 @@
 
     offsetWarning = "";
 
+    if ($printerMeta !== undefined && printerOf(labelProps) !== $printerMeta.driver) {
+      offsetWarning += `${$tr("params.label.warning.printer")} ${driverById(printerOf(labelProps)).displayName}\n`;
+    }
+
     if ($printerMeta !== undefined) {
       const printHeight = iData.height + (offset.offsetType === "outer" ? Math.abs(offset.y) : 0);
       const printWidth = iData.width + (offset.offsetType === "outer" ? Math.abs(offset.x) : 0);
@@ -769,7 +774,7 @@
   {/if}
 
   {#if offsetWarning}
-    <div class="alert alert-warning py-2 small" role="alert">{offsetWarning}</div>
+    <div class="alert alert-warning py-2 small warning-lines" role="alert">{offsetWarning.trim()}</div>
   {/if}
 
   <div class="settings">
@@ -1068,6 +1073,10 @@
     object-fit: contain;
     box-shadow: 0 0 0 1px var(--border-emphasis), 0 6px 18px rgba(0, 0, 0, 0.45);
   }
+  .warning-lines {
+    white-space: pre-line;
+  }
+
   canvas.paper {
     image-rendering: auto;
   }

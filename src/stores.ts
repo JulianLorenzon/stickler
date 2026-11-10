@@ -40,6 +40,8 @@ export const loadedFonts = writable<FontFace[]>([]);
 
 export const connectionState = writable<ConnectionState>("disconnected");
 export const connectedPrinterName = writable<string>("");
+/** Address of the printer connected via native BLE (undefined for Web Bluetooth or when disconnected) */
+export const connectedDeviceId = writable<string | undefined>();
 export const printerClient = writable<PrinterClient>();
 export const heartbeatData = writable<HeartbeatData>();
 export const printerInfo = writable<PrinterInfo>();
@@ -130,6 +132,7 @@ export const initClient = () => {
         console.log("onDisconnect");
         connectionState.set("disconnected");
         connectedPrinterName.set("");
+        connectedDeviceId.set(undefined);
         printerInfo.set({});
         printerMeta.set(undefined);
       });

@@ -1,7 +1,16 @@
 import { get } from "svelte/store";
 import { Utils, driverForName } from "$/lib/printer";
 import type { KnownPrinter } from "$/types";
-import { automation, autoReconnect, connectionState, initClient, knownPrinters, printerClient, printerMeta } from "$/stores";
+import {
+  automation,
+  autoReconnect,
+  connectedDeviceId,
+  connectionState,
+  initClient,
+  knownPrinters,
+  printerClient,
+  printerMeta,
+} from "$/stores";
 import { Toasts } from "$/utils/toasts";
 
 export type FoundPrinter = { deviceId: string; name: string; rssi?: number };
@@ -55,6 +64,7 @@ export const connectNative = async (printer: FoundPrinter, opts: { silent?: bool
     return false;
   }
 
+  connectedDeviceId.set(printer.deviceId);
   rememberPrinter(printer);
   return true;
 };
