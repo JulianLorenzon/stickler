@@ -302,6 +302,7 @@
     "preview.dotgain": "Dot correction",
     "preview.dotgain.hint": "Thermal dots spread into each other and single dots come out faint, so greys print with more contrast than on screen. This adjusts the greys before dithering so they print closer to the design.",
     "preview.invert": "Invert",
+    "preview.warning.confirm": "Print anyway?",
     "main.dismiss": "Close",
     "params.generic.fit.mode": "Fit mode"
 }

@@ -183,6 +183,13 @@
     }
   };
 
+  /** Print, but ask first when the preview warns (label for another printer, wider than the print head) */
+  const onPrintClicked = () => {
+    const warning = offsetWarning.trim();
+    if (warning && !confirm(`${warning}\n\n${$tr("preview.warning.confirm")}`)) return;
+    onPrint();
+  };
+
   const onPrint = async () => {
     printState = "sending";
     error = "";
@@ -441,10 +448,13 @@
       iData = werness(corrected(tone(iData, thresholdValue)));
     }
 
+    // Trim before inverting: the free room after the content is white until then, inverted it would print black
+    if (labelProps.autoLength) {
+      iData = trimBlankEnds(iData, labelProps.printDirection === "top" ? "rows" : "cols");
+    }
+
     if (postProcessInvert) {
       iData = invert(iData);
-    } else if (labelProps.autoLength) {
-      iData = trimBlankEnds(iData, labelProps.printDirection === "top" ? "rows" : "cols");
     }
 
     processedCanvas.width = iData.width;
@@ -703,7 +713,7 @@
     await generatePreviewData(page);
 
     if (printNow && !$disconnected && printState === "idle") {
-      onPrint();
+      onPrintClicked();
     }
   });
 </script>
@@ -1037,7 +1047,7 @@
       type="button"
       class="btn btn-primary print-btn"
       disabled={$disconnected || printState !== "idle"}
-      onclick={onPrint}>
+      onclick={onPrintClicked}>
       {#if $disconnected}
         {$tr("preview.not_connected")}
       {:else if printState !== "idle"}

@@ -302,6 +302,7 @@
     "preview.dotgain": "Korekcja punktów",
     "preview.dotgain.hint": "Punkty termiczne zlewają się ze sobą, a pojedyncze wychodzą blado, więc szarości drukują się z większym kontrastem niż na ekranie. To dopasowuje szarości przed rastrowaniem, żeby wydruk był bliżej projektu.",
     "preview.invert": "Odwróć",
+    "preview.warning.confirm": "Wydrukować mimo to?",
     "main.dismiss": "Zamknij",
     "params.generic.fit.mode": "Sposób dopasowania"
 }

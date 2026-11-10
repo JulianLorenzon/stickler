@@ -302,6 +302,7 @@
     "preview.dotgain": "Corrección de puntos",
     "preview.dotgain.hint": "Los puntos térmicos se funden entre sí y los puntos sueltos salen débiles, así que los grises se imprimen con más contraste que en pantalla. Esto ajusta los grises antes del tramado para que se impriman más parecidos al diseño.",
     "preview.invert": "Invertir",
+    "preview.warning.confirm": "¿Imprimir de todos modos?",
     "main.dismiss": "Cerrar",
     "params.generic.fit.mode": "Modo de ajuste"
 }

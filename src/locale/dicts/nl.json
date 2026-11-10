@@ -302,6 +302,7 @@
     "preview.dotgain": "Puntcorrectie",
     "preview.dotgain.hint": "Thermische punten vloeien in elkaar over en losse punten komen zwak op papier, dus grijs wordt contrastrijker afgedrukt dan op het scherm. Dit past het grijs aan vóór het ditheren, zodat het dichter bij het ontwerp uitkomt.",
     "preview.invert": "Omkeren",
+    "preview.warning.confirm": "Toch afdrukken?",
     "main.dismiss": "Sluiten",
     "params.generic.fit.mode": "Manier van passend maken"
 }

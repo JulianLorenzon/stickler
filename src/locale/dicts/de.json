@@ -302,6 +302,7 @@
     "preview.dotgain": "Punktkorrektur",
     "preview.dotgain.hint": "Thermopunkte laufen ineinander und einzelne Punkte kommen blass heraus, deshalb druckt Grau kontrastreicher als auf dem Bildschirm. Das passt die Grautöne vor dem Dithering an, damit der Druck näher am Design liegt.",
     "preview.invert": "Invertieren",
+    "preview.warning.confirm": "Trotzdem drucken?",
     "main.dismiss": "Schließen",
     "params.generic.fit.mode": "Art des Einpassens"
 }
