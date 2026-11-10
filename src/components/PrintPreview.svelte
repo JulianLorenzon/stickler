@@ -23,6 +23,7 @@
     type PrintProgressEvent,
     type PrintTaskName,
     AbstractPrintTask,
+    ImageEncoder,
     Utils,
   } from "$/lib/printer";
   import type { LabelProps, PostProcessType, FabricJson, PreviewProps, PreviewPropsOffset } from "$/types";
@@ -133,6 +134,9 @@
     FileUtils.printImageUrls(sources);
   };
 
+  /** Blank paper kept before and after the content with "auto length": 2 mm */
+  const AUTO_LENGTH_MARGIN = 16;
+
   /** Send one image to the printer and wait until it's out. Returns false if sending failed */
   const printImage = async (canvas: HTMLCanvasElement, copies: number): Promise<boolean> => {
     $printerClient.stopHeartbeat();
@@ -147,7 +151,8 @@
     });
 
     try {
-      const encoded: EncodedImage = $printerClient.encodeCanvas(canvas, labelProps.printDirection);
+      let encoded: EncodedImage = $printerClient.encodeCanvas(canvas, labelProps.printDirection);
+      if (labelProps.autoLength) encoded = ImageEncoder.trimBlankRows(encoded, AUTO_LENGTH_MARGIN);
       await currentPrintTask.printInit();
       await currentPrintTask.printPage(encoded, copies);
     } catch (e) {
@@ -765,6 +770,8 @@
     </div>
 
 
+    <!-- Printers with one kind of paper (MXW01: continuous roll) don't need the choice -->
+    {#if $printerMeta === undefined || $printerMeta.paperTypes.length > 1}
     <div class="setting">
       <span class="setting-label">{$tr("preview.label_type")}</span>
       <select class="form-select" bind:value={labelType} onchange={() => updateSavedProp("labelType", labelType)}>
@@ -782,6 +789,7 @@
         savedValue={savedProps.labelType}
         onClick={toggleSavedProp} />
     </div>
+    {/if}
 
     <div class="setting">
       <span class="setting-label">{$tr("preview.postprocess")}</span>

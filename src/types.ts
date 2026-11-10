@@ -27,7 +27,13 @@ export const FabricObjectSchema = z.custom<fabric.FabricObject>((val: any): bool
   return typeof val === "object";
 });
 
+export const PrinterIdSchema = z.enum(["d11s", "mxw01"]);
+
 export const LabelPropsSchema = z.object({
+  /** Printer family the label is made for; missing = Fichero D11s */
+  printer: PrinterIdSchema.optional(),
+  /** Continuous roll: print only as long as the content (blank rows at both ends are left out) */
+  autoLength: z.boolean().optional(),
   printDirection: z.enum(["left", "top"]),
   /** Printable design area in dots */
   size: z.object({
@@ -50,6 +56,9 @@ export const LabelPropsSchema = z.object({
 });
 
 export const LabelPresetSchema = z.object({
+  /** Printer family; missing = Fichero D11s */
+  printer: PrinterIdSchema.optional(),
+  autoLength: z.boolean().optional(),
   width: z.number().positive(),
   height: z.number().positive(),
   unit: z.enum(["mm", "px"]),
@@ -155,3 +164,4 @@ export type AutomationProps = z.infer<typeof AutomationPropsSchema>;
 export type AppConfig = z.infer<typeof AppConfigSchema>;
 export type UserFont = z.infer<typeof UserFontSchema>;
 export type LastPrinter = z.infer<typeof LastPrinterSchema>;
+export type PrinterId = z.infer<typeof PrinterIdSchema>;

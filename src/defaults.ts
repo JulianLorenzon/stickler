@@ -1,5 +1,5 @@
 import * as fabric from "fabric";
-import type { AppConfig, LabelPreset, LabelProps } from "$/types";
+import type { AppConfig, LabelPreset, LabelProps, PrinterId } from "$/types";
 import { TextboxExt } from "$/fabric-object/textbox-ext";
 import { installPhotoCrop } from "$/fabric-object/photo-crop";
 
@@ -43,6 +43,30 @@ export const D11S_ROLLS: LabelPreset[] = [
   { width: 50, height: 14, unit: "mm", dpmm: 8, printDirection: "left", shape: "rect", title: "50×14 mm" },
 ];
 
+/** 57 mm continuous rolls (plain and sticker) for the MXW01; its head prints the middle 48 mm */
+export const MXW01_ROLLS: LabelPreset[] = [
+  { printer: "mxw01", width: 57, height: 30, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "57×30 mm" },
+  { printer: "mxw01", width: 57, height: 40, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "57×40 mm" },
+  { printer: "mxw01", width: 57, height: 60, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "57×60 mm" },
+];
+
+/** Design area for "auto length": prints only as long as the content */
+export const MXW01_AUTO_LENGTH: LabelPreset = {
+  printer: "mxw01",
+  autoLength: true,
+  width: 57,
+  height: 100,
+  unit: "mm",
+  dpmm: 8,
+  printDirection: "top",
+  shape: "rect",
+};
+
+export const ROLLS: Record<PrinterId, LabelPreset[]> = { d11s: D11S_ROLLS, mxw01: MXW01_ROLLS };
+
+/** Printer a label or preset is made for */
+export const printerOf = (p: { printer?: PrinterId }): PrinterId => p.printer ?? "d11s";
+
 /** Length of the label along the paper feed, "width" or "height" of the design area */
 export const feedAxis = (props: LabelProps): "width" | "height" => (props.printDirection === "left" ? "width" : "height");
 
@@ -53,6 +77,8 @@ export const feedAxis = (props: LabelProps): "width" | "height" => (props.printD
 export const withPrintStartMargin = (props: LabelProps): LabelProps => {
   const axis = feedAxis(props);
   const paper = props.paper ?? props.size;
+  // Continuous rolls have no front edge to keep clear of
+  if (printerOf(props) !== "d11s") return props;
   if (props.shape === "circle" || paper[axis] !== props.size[axis] || props.size[axis] <= 2 * PRINT_START_MARGIN) {
     return props;
   }

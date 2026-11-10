@@ -8,14 +8,15 @@
     type LabelShape,
     type LabelSplit,
     type MirrorType,
+    type PrinterId,
     type TailPosition,
   } from "$/types";
-  import { printerMeta } from "$/stores";
+  import { connectionState, designPrinter, printerMeta } from "$/stores";
   import { tr } from "$/utils/i18n";
-  import { DOTS_PER_MM, D11S_ROLLS, withPrintStartMargin } from "$/defaults";
+  import { DOTS_PER_MM, MXW01_AUTO_LENGTH, ROLLS, printerOf, withPrintStartMargin } from "$/defaults";
   import { onMount } from "svelte";
   import { LocalStoragePersistence } from "$/utils/persistence";
-  import { PRINTHEAD_PX, type PrintDirection } from "$/lib/printer";
+  import { DRIVERS, driverById, type PrintDirection } from "$/lib/printer";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { Toasts } from "$/utils/toasts";
   import { FileUtils } from "$/utils/file_utils";
@@ -62,8 +63,14 @@
   let tailLength = $state<number>(0);
   let tailPos = $state<TailPosition>("right");
   let mirror = $state<MirrorType>("none");
+  let autoLength = $state<boolean>(false);
 
-  const printheadDots = (): number => $printerMeta?.printheadPixels ?? PRINTHEAD_PX;
+  let connected = $derived($connectionState === "connected" && $printerMeta !== undefined);
+  /** Printer the sizes are for: the connected one, else the last one used or picked here */
+  let printer = $derived<PrinterId>(connected && $printerMeta ? $printerMeta.driver : $designPrinter);
+  let continuous = $derived(printer === "mxw01");
+
+  const printheadDots = (): number => driverById(printer).raster.printheadPx;
   const mm = (dots: number): number => Math.round((dots / DOTS_PER_MM) * 10) / 10;
 
   /** Old presets may be in px or use another dot density; the D11s is always 8 dots/mm */
@@ -75,13 +82,22 @@
 
   let sizeLabel = $derived.by<string>(() => {
     const paper = paperDots(labelProps);
+    if (labelProps.autoLength) {
+      const auto = $tr("params.label.auto");
+      return labelProps.printDirection === "top" ? `${mm(paper.width)} mm × ${auto}` : `${auto} × ${mm(paper.height)} mm`;
+    }
     return `${mm(paper.width)}×${mm(paper.height)} mm`;
   });
 
   let error = $derived.by<string>(() => {
     let error = "";
 
-    if ($printerMeta !== undefined && $printerMeta.printDirection !== labelProps.printDirection) {
+    if (connected && $printerMeta !== undefined && printerOf(labelProps) !== $printerMeta.driver) {
+      return `${$tr("params.label.warning.printer")} ${driverById(printerOf(labelProps)).displayName}`;
+    }
+
+    // Wide rolls can be printed both ways round
+    if ($printerMeta !== undefined && $printerMeta.driver === "d11s" && $printerMeta.printDirection !== labelProps.printDirection) {
       error += $tr("params.label.warning.direction") + " ";
       if ($printerMeta.printDirection == "left") {
         error += $tr("params.label.direction.left");
@@ -118,6 +134,7 @@
     }
 
     const props: LabelProps = {
+      printer: printerOf(preset),
       printDirection: preset.printDirection,
       size: { width: sizeW, height: sizeH },
       shape: preset.shape ?? "rect",
@@ -127,6 +144,8 @@
       tailLength: Math.floor(presetDots(preset, preset.tailLength ?? 0)),
       mirror: preset.mirror ?? "none",
     };
+    if (preset.printer === undefined) delete props.printer;
+    if (preset.autoLength) props.autoLength = true;
 
     if (paperW !== sizeW || paperH !== sizeH) {
       props.paper = { width: paperW, height: paperH };
@@ -143,6 +162,8 @@
       a.width === b.width &&
       a.height === b.height &&
       target.printDirection === labelProps.printDirection &&
+      printerOf(target) === printerOf(labelProps) &&
+      !!target.autoLength === !!labelProps.autoLength &&
       (target.shape ?? "rect") === (labelProps.shape ?? "rect") &&
       (target.split ?? "none") === (labelProps.split ?? "none")
     );
@@ -150,6 +171,7 @@
 
   const presetTitle = (preset: LabelPreset): string => {
     if (preset.title) return preset.title;
+    if (preset.autoLength) return $tr("params.label.auto_length");
     return `${mm(presetDots(preset, preset.width))}×${mm(presetDots(preset, preset.height))} mm`;
   };
 
@@ -169,6 +191,8 @@
   };
 
   const formPreset = (): LabelPreset => ({
+    ...(printer === "d11s" ? {} : { printer }),
+    ...(continuous && autoLength ? { autoLength: true } : {}),
     dpmm: DOTS_PER_MM,
     unit: "mm",
     printDirection,
@@ -212,6 +236,21 @@
 
   /** Prefill the custom form with the current label */
   const fillWithCurrentParams = () => {
+    // A label for the other printer is no useful start: take that printer's first roll instead
+    if (printerOf(labelProps) !== printer) {
+      const roll = ROLLS[printer][0];
+      width = roll.width;
+      height = roll.height;
+      printDirection = roll.printDirection;
+      shape = "rect";
+      split = "none";
+      splitParts = 2;
+      tailPos = "right";
+      tailLength = 0;
+      mirror = "none";
+      autoLength = false;
+      return;
+    }
     const paper = paperDots(labelProps);
     width = mm(paper.width);
     height = mm(paper.height);
@@ -222,7 +261,15 @@
     tailPos = labelProps.tailPos ?? "right";
     tailLength = mm(labelProps.tailLength ?? 0);
     mirror = labelProps.mirror ?? "none";
+    autoLength = labelProps.autoLength ?? false;
   };
+
+  /** The user's sizes for this printer, with their index in the saved list */
+  let visibleUserPresets = $derived(
+    userPresets.map((preset, idx) => ({ preset, idx })).filter(({ preset }) => printerOf(preset) === printer),
+  );
+
+  let rolls = $derived<LabelPreset[]>(continuous ? [...ROLLS[printer], MXW01_AUTO_LENGTH] : ROLLS[printer]);
 
   const toggleCustom = () => {
     customOpen = !customOpen;
@@ -304,20 +351,40 @@
     <h6 class="dropdown-header">{$tr("params.label.menu_title")}</h6>
 
     <div class="px-3 pb-3">
-      <div class="section-title">{$tr("params.label.rolls")}</div>
+      <div class="section-title">{$tr("params.label.printer")}</div>
+      <div class="printer-switch" role="group" aria-label={$tr("params.label.printer")}>
+        {#each DRIVERS as d (d.id)}
+          <button
+            class="btn {printer === d.id ? 'btn-primary' : 'btn-outline-secondary'}"
+            aria-pressed={printer === d.id}
+            disabled={connected && printer !== d.id}
+            onclick={() => designPrinter.set(d.id)}>{d.displayName}</button>
+        {/each}
+      </div>
+      {#if connected}
+        <div class="form-text mb-3">{$tr("params.label.printer.connected")}</div>
+      {/if}
+
+      <div class="section-title">{$tr(continuous ? "params.label.rolls.wide" : "params.label.rolls")}</div>
       <div class="roll-grid">
-        {#each D11S_ROLLS as roll (roll.title)}
+        {#each rolls as roll (presetTitle(roll))}
           <button class="roll-btn" class:active={isActive(roll)} onclick={() => applyPreset(roll)}>
-            <span class="thumb-box"><span class="thumb" style={thumbStyle(roll)}></span></span>
+            <span class="thumb-box">
+              <span
+                class="thumb"
+                class:feed-top={roll.printDirection === "top"}
+                class:auto={roll.autoLength}
+                style={thumbStyle(roll)}></span>
+            </span>
             <span>{presetTitle(roll)}</span>
           </button>
         {/each}
       </div>
 
-      {#if userPresets.length > 0}
+      {#if visibleUserPresets.length > 0}
         <div class="section-title">{$tr("params.label.my_sizes")}</div>
         <div class="chips">
-          {#each userPresets as preset, idx (idx)}
+          {#each visibleUserPresets as { preset, idx } (idx)}
             <div class="chip" class:active={isActive(preset)}>
               <button class="chip-main" onclick={() => applyPreset(preset)}>{presetTitle(preset)}</button>
               <button
@@ -351,11 +418,23 @@
           </div>
           <div class="form-text mb-2">
             {#if customAcross > printableMm}
-              {$tr("params.label.printable_note").replace("{printable}", String(printableMm)).replace("{label}", String(customAcross))}
+              {$tr(continuous ? "params.label.printable_note.wide" : "params.label.printable_note")
+                .replace("{printable}", String(printableMm))
+                .replace("{label}", String(customAcross))}
             {:else}
-              {$tr("params.label.size_hint")}
+              {$tr(continuous ? "params.label.size_hint.wide" : "params.label.size_hint")}
             {/if}
           </div>
+
+          {#if continuous}
+            <div class="form-check mb-2 auto-length-check">
+              <input class="form-check-input" type="checkbox" id="auto-length" bind:checked={autoLength} />
+              <label class="form-check-label" for="auto-length">
+                {$tr("params.label.auto_length")}
+                <span class="form-text d-block mt-0">{$tr("params.label.auto_length.hint")}</span>
+              </label>
+            </div>
+          {/if}
 
           <div class="input-group flex-nowrap input-group-sm print-dir-switch mb-2" role="group">
             <span class="input-group-text w-100">{$tr("params.label.direction")}</span>
@@ -542,6 +621,32 @@
     background: #fff;
     border-radius: 2px;
     border-left: 2px solid var(--mark-feed);
+  }
+
+  .thumb.feed-top {
+    border-left: none;
+    border-top: 2px solid var(--mark-feed);
+  }
+
+  .thumb.auto {
+    border-bottom: 2px dashed var(--ink-tertiary);
+    border-radius: 2px 2px 0 0;
+  }
+
+  .printer-switch {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .printer-switch .btn {
+    min-height: 44px;
+  }
+
+  .auto-length-check .form-check-input {
+    width: 1.25em;
+    height: 1.25em;
   }
 
   .chips {

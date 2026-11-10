@@ -5,7 +5,9 @@ import {
   UserFontSchema,
   UserIconSchema,
   LastPrinterSchema,
+  PrinterIdSchema,
   type LastPrinter,
+  type PrinterId,
   type CsvParams,
   type UserFont,
   type UserIcon,
@@ -48,6 +50,10 @@ export const printerMeta = writable<PrinterModelMeta | undefined>();
 export const heartbeatFails = writable<number>(0);
 /** Last printer connected via native BLE, used for one-tap / automatic reconnect */
 export const lastPrinter = writablePersisted<LastPrinter | null>("last_printer", LastPrinterSchema.nullable(), null);
+/**
+ * Printer the label sizes are shown for: the connected one, else the last one connected or picked in the size menu
+ */
+export const designPrinter = writablePersisted<PrinterId>("design_printer", PrinterIdSchema, "d11s");
 /** Printer connection sheet visibility, so any component can ask the user to connect */
 export const printerSheetOpen = writable<boolean>(false);
 export const csvData = writablePersisted<CsvParams>("csv_params", CsvParamsSchema, { data: CSV_DEFAULT });
@@ -114,7 +120,9 @@ export const initClient = () => {
       newClient.on("printerinfofetched", (e) => {
         console.log("printerInfoFetched");
         printerInfo.set(e.info);
-        printerMeta.set(newClient.getModelMetadata());
+        const meta = newClient.getModelMetadata();
+        printerMeta.set(meta);
+        designPrinter.set(meta.driver);
       });
 
       newClient.on("disconnect", () => {
