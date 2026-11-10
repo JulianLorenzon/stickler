@@ -102,11 +102,12 @@ def box_mean(row, sx, sy, hw, hh):
     return L[y_a:y_b, x_a:x_b].mean(), (x_a, y_a, x_b, y_b)
 
 
-# Paper samples: margins left and right of the print, and the blank band right of the mode name
+# Paper samples: margins left and right of the print, and the blank band right of the mode name (also clear of
+# the longer "· corrected" titles)
 paper_pts, paper_vals, boxes_paper = [], [], []
 for row in range(4):
     for sx, sy in [(-14, 30), (-14, 60), (-14, 85), (398, 30), (398, 60), (398, 85),
-                   (200, 10), (250, 10), (300, 10), (350, 10)]:
+                   (290, 10), (320, 10), (350, 10), (375, 10)]:
         val, box = box_mean(row, sx, sy, 4, 3)
         p = to_img(row, sx, sy)
         paper_pts.append(p)

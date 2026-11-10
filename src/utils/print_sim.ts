@@ -30,15 +30,19 @@ export const D11S_DOT_MODEL: DotModel = {
 };
 
 /**
- * MXW01 on its 57 mm roll: fitted to the continuous-roll grey test (all four dither modes, uncorrected, the saved
- * print preview density or the middle one) photographed 2026-11-10, measured with tools/dot-gain/measure_strip.py, rms 0.038 over 36 patches. A free
- * fit gives base 0.04 at the same error; 0.15 keeps the single dots that are visible in the lightest patches.
+ * MXW01 on its 57 mm roll, fitted with tools/dot-gain/fit_strip.mjs to three grey strips (all four dither modes):
+ * the uncorrected strip in two photos and a strip printed with the first fit's correction (2026-11-10/11, data in
+ * mxw01-2026-11-11.json). rms 0.045 over 108 patches; the two photos of the same strip already differ by 0.05-0.08 in
+ * the mid greys, so this is about as close as phone photos get. The corrected strip came out within 0.05 of the
+ * intended greys with blue noise and Werness but 0.1 too light with Floyd–Steinberg and Atkinson above 50%; one model
+ * can't fit both, this one corrects a little less than the first fit. A free fit gives base 0.06 at the same error;
+ * 0.15 keeps the single dots visible in the lightest patches.
  */
 export const MXW01_DOT_MODEL: DotModel = {
   base: 0.15,
-  orth: 0.328,
-  diag: 0.117,
-  spillOrth: 0.121,
+  orth: 0.235,
+  diag: 0.103,
+  spillOrth: 0.122,
   spillDiag: 0.007,
 };
 
