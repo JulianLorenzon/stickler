@@ -22,23 +22,6 @@ export class ImageEncoder {
     };
   }
 
-  /**
-   * Leave out the blank rows at both ends (along the paper feed), keeping `marginRows` of them on each side.
-   * For continuous rolls with "auto length". A blank image stays as it is.
-   */
-  static trimBlankRows(image: EncodedImage, marginRows: number): EncodedImage {
-    const { cols, rows, rowsData } = image;
-    const blank = (r: number) => rowsData.subarray(r * cols, (r + 1) * cols).every((b) => b === 0);
-    let first = 0;
-    while (first < rows && blank(first)) first++;
-    if (first === rows) return image;
-    let last = rows - 1;
-    while (last > first && blank(last)) last--;
-    const start = Math.max(0, first - marginRows);
-    const end = Math.min(rows, last + 1 + marginRows);
-    return { cols, rows: end - start, rowsData: rowsData.slice(start * cols, end * cols) };
-  }
-
   private static rotateCW90(canvas: HTMLCanvasElement): HTMLCanvasElement {
     const rotated = document.createElement("canvas");
     rotated.width = canvas.height;

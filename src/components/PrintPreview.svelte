@@ -23,7 +23,6 @@
     type PrintProgressEvent,
     type PrintTaskName,
     AbstractPrintTask,
-    ImageEncoder,
     Utils,
   } from "$/lib/printer";
   import type { LabelProps, PostProcessType, FabricJson, PreviewProps, PreviewPropsOffset } from "$/types";
@@ -133,12 +132,6 @@
     FileUtils.printImageUrls(sources);
   };
 
-  /**
-   * Blank rows kept before and after the content with "auto length". None: the MXW01 already leaves ~8.5 mm before
-   * a print (head to tear bar) and ~6 mm after it (it feeds ~14.5 mm after every job)
-   */
-  const AUTO_LENGTH_MARGIN = 0;
-
   /** Send one image to the printer and wait until it's out. Returns false if sending failed */
   const printImage = async (canvas: HTMLCanvasElement, copies: number): Promise<boolean> => {
     $printerClient.stopHeartbeat();
@@ -153,8 +146,7 @@
     });
 
     try {
-      let encoded: EncodedImage = $printerClient.encodeCanvas(canvas, labelProps.printDirection);
-      if (labelProps.autoLength) encoded = ImageEncoder.trimBlankRows(encoded, AUTO_LENGTH_MARGIN);
+      const encoded: EncodedImage = $printerClient.encodeCanvas(canvas, labelProps.printDirection);
       await currentPrintTask.printInit();
       await currentPrintTask.printPage(encoded, copies);
     } catch (e) {
@@ -399,6 +391,35 @@
     }
   };
 
+  /**
+   * "Auto length": leave out the blank (white) rows or columns at both ends along the paper feed, so the preview
+   * shows what gets printed. A blank image stays as it is.
+   */
+  const trimBlankEnds = (img: ImageData, along: "rows" | "cols"): ImageData => {
+    const { width: w, height: h, data } = img;
+    const isBlank = (i: number): boolean => {
+      const n = along === "rows" ? w : h;
+      for (let j = 0; j < n; j++) {
+        const p = along === "rows" ? (i * w + j) * 4 : (j * w + i) * 4;
+        if (data[p] < 128) return false;
+      }
+      return true;
+    };
+    const len = along === "rows" ? h : w;
+    let first = 0;
+    while (first < len && isBlank(first)) first++;
+    if (first === len) return img;
+    let last = len - 1;
+    while (last > first && isBlank(last)) last--;
+    const [x, y, cw, ch] = along === "rows" ? [0, first, w, last - first + 1] : [first, 0, last - first + 1, h];
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext("2d")!;
+    ctx.putImageData(img, 0, 0);
+    return ctx.getImageData(x, y, cw, ch);
+  };
+
   const updatePreview = () => {
     let iData: ImageData = copyImageData(originalImage);
     const curve = curveFor(postProcessType);
@@ -422,6 +443,8 @@
 
     if (postProcessInvert) {
       iData = invert(iData);
+    } else if (labelProps.autoLength) {
+      iData = trimBlankEnds(iData, labelProps.printDirection === "top" ? "rows" : "cols");
     }
 
     processedCanvas.width = iData.width;
