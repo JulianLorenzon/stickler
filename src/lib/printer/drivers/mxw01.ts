@@ -10,8 +10,11 @@ export const MXW01_PRINTHEAD_PX = 384;
 const BYTES_PER_ROW = MXW01_PRINTHEAD_PX / 8;
 /** The printer seems to need at least this many lines per job */
 const MIN_LINES = 90;
-/** Heat per density step (light, medium, dark); 0x5D is what the official app is reported to use */
-const INTENSITY = [0x48, 0x5d, 0x78];
+/**
+ * Heat per density step (light, medium, dark). Calibration print 2026-11-10: 0x20 barely prints, 0x80 is as dark as
+ * it gets (more heat adds nothing)
+ */
+const INTENSITY = [0x40, 0x60, 0x80];
 
 const enum Cmd {
   Status = 0xa1,
