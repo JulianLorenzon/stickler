@@ -19,7 +19,6 @@
   import * as fabric from "fabric";
   import {
     type EncodedImage,
-    ImageEncoder,
     LabelType,
     type PrintProgressEvent,
     type PrintTaskName,
@@ -148,7 +147,7 @@
     });
 
     try {
-      const encoded: EncodedImage = ImageEncoder.encodeCanvas(canvas, labelProps.printDirection);
+      const encoded: EncodedImage = $printerClient.encodeCanvas(canvas, labelProps.printDirection);
       await currentPrintTask.printInit();
       await currentPrintTask.printPage(encoded, copies);
     } catch (e) {

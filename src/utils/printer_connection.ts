@@ -1,13 +1,11 @@
 import { get } from "svelte/store";
-import { Utils } from "$/lib/printer";
+import { Utils, driverForName } from "$/lib/printer";
 import { automation, connectionState, initClient, lastPrinter, printerClient } from "$/stores";
 import { Toasts } from "$/utils/toasts";
 
 export type FoundPrinter = { deviceId: string; name: string; rssi?: number };
 
-const PRINTER_NAME_PREFIXES = ["FICHERO", "D11s_"];
-
-const isPrinterName = (name: string): boolean => PRINTER_NAME_PREFIXES.some((p) => name.startsWith(p));
+const isPrinterName = (name: string): boolean => driverForName(name) !== undefined;
 
 const loadBle = () => import("@capacitor-community/bluetooth-le");
 
@@ -70,7 +68,7 @@ let scanStopTimer: ReturnType<typeof setTimeout> | undefined;
 let scanning = false;
 
 /**
- * Native BLE: scan for Fichero printers. `onFound` is called for every new device and for RSSI updates
+ * Native BLE: scan for supported printers. `onFound` is called for every new device and for RSSI updates
  * of already seen ones. Scan stops automatically after `durationMs`, then `onStopped` is called.
  */
 export const startScan = async (

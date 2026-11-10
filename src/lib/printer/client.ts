@@ -1,25 +1,28 @@
 import { Capacitor } from "@capacitor/core";
-import {
-  SERVICE_UUID,
-  WRITE_CHAR_UUID,
-  NOTIFY_CHAR_UUID,
-  CHUNK_SIZE,
-  CLIENT_DEFAULTS,
-  CMD,
-} from "./constants";
+import { CLIENT_DEFAULTS } from "./constants";
 import { TypedEventEmitter } from "./emitter";
 import { Utils } from "./utils";
-import { D11sPrintTask } from "./print_task";
+import { ImageEncoder } from "./image_encoder";
+import type { PrintTaskOptions } from "./print_task";
+import {
+  ALL_NAME_PREFIXES,
+  ALL_SERVICE_UUIDS,
+  driverForName,
+  driverForServices,
+  type DriverIO,
+  type PrinterDriver,
+} from "./drivers";
 import type {
   ConnectionInfo,
+  EncodedImage,
   HeartbeatData,
+  PrintDirection,
   PrinterInfo,
   PrinterModelMeta,
   PrintProgressEvent,
   FirmwareProgressEvent,
   RfidInfo,
   Packet,
-  LabelType,
   PrintTaskName,
 } from "./types";
 
@@ -44,42 +47,49 @@ function makePacket(data: readonly number[] | number[] | Uint8Array): Packet {
   };
 }
 
+/** Picks the driver for a device: by Bluetooth name, else by the services it offers */
+export type DriverPicker = (deviceName: string | undefined, serviceUuids: () => Promise<string[]>) => Promise<PrinterDriver>;
+
+const pickDriver: DriverPicker = async (deviceName, serviceUuids) => {
+  const driver = driverForName(deviceName) ?? driverForServices(await serviceUuids());
+  if (!driver) throw new Error(`Unsupported printer${deviceName ? ` (${deviceName})` : ""}`);
+  return driver;
+};
+
 export abstract class PrinterClient extends TypedEventEmitter<ClientEventMap> {
   private notifyBuf: number[] = [];
   private notifyResolve: (() => void) | null = null;
+  private notifyListeners = new Set<(data: Uint8Array) => void>();
   private heartbeatTimer: ReturnType<typeof setInterval> | undefined;
   private heartbeatFailCount = 0;
   /** Pause after each chunk of print data */
   private packetIntervalMs: number = CLIENT_DEFAULTS.packetIntervalMs;
   private info: PrinterInfo = {};
   private _connected = false;
+  /** Set while connecting, before the connection is up */
+  protected driver: PrinterDriver | undefined;
+
+  private readonly io: DriverIO = {
+    sendCommand: (data, wait, timeout) => this.sendCommand(data, wait, timeout),
+    sendData: (data) => this.sendChunked(data),
+    onNotify: (listener) => {
+      this.notifyListeners.add(listener);
+      return () => this.notifyListeners.delete(listener);
+    },
+    emitProgress: (e) => this.emit("printprogress", e),
+  };
 
   readonly abstraction = {
-    newPrintTask: (
-      _name: PrintTaskName,
-      opts: {
-        totalPages: number;
-        density: number;
-        speed: number;
-        labelType: LabelType;
-        statusPollIntervalMs: number;
-        statusTimeoutMs: number;
-      },
-    ) => {
-      return new D11sPrintTask(
-        opts,
-        (data, wait, timeout) => this.sendCommand(data, wait, timeout),
-        (data) => this.sendChunked(data),
-        (e) => this.emit("printprogress", e),
-      );
+    newPrintTask: (_name: PrintTaskName, opts: PrintTaskOptions) => {
+      return this.requireDriver().newPrintTask(this.io, opts);
     },
 
     printEnd: async () => {
-      // No-op for D11s - stop is handled per-copy in print task
+      // No-op: drivers finish each copy inside the print task
     },
 
     printerReset: async () => {
-      await this.sendCommand(CMD.factoryReset, true);
+      await this.requireDriver().factoryReset?.(this.io);
     },
 
     rfidInfo: async (): Promise<RfidInfo> => {
@@ -91,7 +101,7 @@ export abstract class PrinterClient extends TypedEventEmitter<ClientEventMap> {
     },
 
     setSoundEnabled: async (_type: number, _enabled: boolean) => {
-      // Not supported on D11s
+      // Not supported
     },
 
     firmwareUpgrade: async (_data: Uint8Array, _version: string) => {
@@ -99,9 +109,20 @@ export abstract class PrinterClient extends TypedEventEmitter<ClientEventMap> {
     },
   };
 
+  private requireDriver(): PrinterDriver {
+    if (!this.driver) throw new Error("Not connected");
+    return this.driver;
+  }
+
+  /** Driver of the connected printer */
+  getDriver(): PrinterDriver | undefined {
+    return this.driver;
+  }
+
   /** Called by subclasses whenever a BLE notification arrives from the printer */
   protected handleNotify(data: Uint8Array): void {
     this.notifyBuf.push(...data);
+    for (const l of this.notifyListeners) l(data);
     if (this.notifyResolve) {
       this.notifyResolve();
       this.notifyResolve = null;
@@ -109,22 +130,25 @@ export abstract class PrinterClient extends TypedEventEmitter<ClientEventMap> {
   }
 
   /**
-   * Establish BLE connection.
-   * Subclasses must call handleNotify() for each incoming notification.
+   * Establish the BLE connection, use `pick` to choose the driver (set `this.driver` to it) and subscribe to its
+   * notify characteristic. Subclasses must call handleNotify() for each incoming notification.
    */
-  protected abstract rawConnect(opts?: {
-    deviceId?: string;
-    deviceName?: string;
-  }): Promise<{ deviceName?: string }>;
+  protected abstract rawConnect(
+    opts: { deviceId?: string; deviceName?: string } | undefined,
+    pick: DriverPicker,
+  ): Promise<{ deviceName?: string }>;
 
   /** Tear down the BLE connection */
   protected abstract rawDisconnect(): void;
 
-  /** Write bytes to the write characteristic */
-  protected abstract rawWrite(data: Uint8Array): Promise<void>;
+  /** Write bytes to a characteristic of the driver's service */
+  protected abstract rawWrite(data: Uint8Array, charUuid: string): Promise<void>;
 
   async connect(opts?: { deviceId?: string; deviceName?: string }): Promise<void> {
-    const { deviceName } = await this.rawConnect(opts);
+    const { deviceName } = await this.rawConnect(opts, async (name, services) => {
+      this.driver = await pickDriver(name, services);
+      return this.driver;
+    });
     this._connected = true;
     this.emit("connect", { info: { deviceName: opts?.deviceName ?? deviceName } });
     await this.fetchPrinterInfo();
@@ -164,6 +188,7 @@ export abstract class PrinterClient extends TypedEventEmitter<ClientEventMap> {
     timeout = 2000,
   ): Promise<Uint8Array> {
     if (!this._connected) throw new Error("Not connected");
+    const driver = this.requireDriver();
 
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
 
@@ -173,7 +198,7 @@ export abstract class PrinterClient extends TypedEventEmitter<ClientEventMap> {
       this.notifyBuf = [];
     }
 
-    await this.rawWrite(bytes);
+    await this.rawWrite(bytes, driver.writeCharUuid);
 
     if (wait) {
       await this.waitForNotify(timeout);
@@ -191,67 +216,29 @@ export abstract class PrinterClient extends TypedEventEmitter<ClientEventMap> {
 
   async sendChunked(data: Uint8Array): Promise<void> {
     if (!this._connected) throw new Error("Not connected");
+    const driver = this.requireDriver();
+    const charUuid = driver.dataCharUuid ?? driver.writeCharUuid;
 
-    for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-      const chunk = data.slice(i, i + CHUNK_SIZE);
-      await this.rawWrite(chunk);
+    for (let i = 0; i < data.length; i += driver.chunkSize) {
+      const chunk = data.slice(i, i + driver.chunkSize);
+      await this.rawWrite(chunk, charUuid);
       await Utils.sleep(this.packetIntervalMs);
     }
   }
 
-  private decodeResponse(buf: number[] | Uint8Array): string {
-    return new TextDecoder().decode(new Uint8Array(buf)).trim();
-  }
-
   async fetchPrinterInfo(): Promise<void> {
-    const info: PrinterInfo = {};
-
-    let r = await this.sendCommand(CMD.getModel, true);
-    info.modelId = this.decodeResponse(r);
-
-    r = await this.sendCommand(CMD.getFirmware, true);
-    info.firmware = this.decodeResponse(r);
-
-    r = await this.sendCommand(CMD.getSerial, true);
-    info.serial = this.decodeResponse(r);
-
-    r = await this.sendCommand(CMD.getBattery, true);
-    if (r.length >= 2) {
-      info.battery = r[r.length - 1];
-      info.charging = r[r.length - 2] !== 0;
-    }
-
-    r = await this.sendCommand(CMD.getStatus, true);
-    if (r.length > 0) {
-      const sb = r[r.length - 1];
-      info.status = this.parseStatusByte(sb);
-    }
-
+    const info = await this.requireDriver().fetchInfo(this.io);
     this.info = info;
     this.emit("printerinfofetched", { info });
   }
 
-  private parseStatusByte(byte: number): string {
-    const flags: string[] = [];
-    if (byte & 0x01) flags.push("printing");
-    if (byte & 0x02) flags.push("cover open");
-    if (byte & 0x04) flags.push("no paper");
-    if (byte & 0x08) flags.push("low battery");
-    if (byte & 0x10 || byte & 0x40) flags.push("overheated");
-    if (byte & 0x20) flags.push("charging");
-    return flags.length ? flags.join(", ") : "ready";
+  getModelMetadata(): PrinterModelMeta {
+    return this.requireDriver().meta(this.info);
   }
 
-  getModelMetadata(): PrinterModelMeta {
-    return {
-      model: this.info.modelId ?? "D11s",
-      printheadPixels: 96,
-      printDirection: "left" as const,
-      densityMin: 0,
-      densityMax: 2,
-      densityDefault: 2,
-      paperTypes: [1, 2, 3], // LabelType values
-    };
+  /** Turn a black-and-white canvas into the connected printer's raster format */
+  encodeCanvas(canvas: HTMLCanvasElement, direction: PrintDirection): EncodedImage {
+    return ImageEncoder.encodeCanvas(canvas, direction, this.requireDriver().raster);
   }
 
   getPrintTaskType(): PrintTaskName {
@@ -268,12 +255,8 @@ export abstract class PrinterClient extends TypedEventEmitter<ClientEventMap> {
 
     this.heartbeatTimer = setInterval(async () => {
       try {
-        const r = await this.sendCommand(CMD.getBattery, true);
-        if (r.length >= 2) {
-          const data: HeartbeatData = {
-            chargeLevel: r[r.length - 1],
-            charging: r[r.length - 2] !== 0,
-          };
+        const data = await this.requireDriver().heartbeat(this.io);
+        if (data) {
           this.heartbeatFailCount = 0;
           this.emit("heartbeat", { data });
         }
@@ -298,19 +281,19 @@ export abstract class PrinterClient extends TypedEventEmitter<ClientEventMap> {
 
 export class WebBleClient extends PrinterClient {
   private device: BluetoothDevice | null = null;
-  private writeChar: BluetoothRemoteGATTCharacteristic | null = null;
-  private notifyChar: BluetoothRemoteGATTCharacteristic | null = null;
+  private service: BluetoothRemoteGATTService | null = null;
+  private chars = new Map<string, BluetoothRemoteGATTCharacteristic>();
 
-  protected async rawConnect(_opts?: {
-    deviceId?: string;
-    deviceName?: string;
-  }): Promise<{ deviceName?: string }> {
+  protected async rawConnect(
+    _opts: { deviceId?: string; deviceName?: string } | undefined,
+    pick: DriverPicker,
+  ): Promise<{ deviceName?: string }> {
     let device: BluetoothDevice;
 
     try {
       device = await navigator.bluetooth.requestDevice({
-        filters: [{ namePrefix: "FICHERO" }, { namePrefix: "D11s_" }],
-        optionalServices: [SERVICE_UUID],
+        filters: ALL_NAME_PREFIXES.map((namePrefix) => ({ namePrefix })),
+        optionalServices: ALL_SERVICE_UUIDS,
       });
     } catch {
       throw new Error("No device selected");
@@ -319,17 +302,28 @@ export class WebBleClient extends PrinterClient {
     device.addEventListener("gattserverdisconnected", () => this.onDisconnected());
 
     const server = await device.gatt!.connect();
-    const service = await server.getPrimaryService(SERVICE_UUID);
-    this.writeChar = await service.getCharacteristic(WRITE_CHAR_UUID);
-    this.notifyChar = await service.getCharacteristic(NOTIFY_CHAR_UUID);
-    await this.notifyChar.startNotifications();
-    this.notifyChar.addEventListener("characteristicvaluechanged", (e: Event) => {
+    const driver = await pick(device.name, async () => (await server.getPrimaryServices()).map((s) => s.uuid));
+    this.service = await server.getPrimaryService(driver.serviceUuid);
+    const notifyChar = await this.getChar(driver.notifyCharUuid);
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener("characteristicvaluechanged", (e: Event) => {
       const target = e.target as BluetoothRemoteGATTCharacteristic;
-      this.handleNotify(new Uint8Array(target.value!.buffer));
+      const v = target.value!;
+      this.handleNotify(new Uint8Array(v.buffer, v.byteOffset, v.byteLength).slice());
     });
 
     this.device = device;
     return { deviceName: device.name };
+  }
+
+  private async getChar(uuid: string): Promise<BluetoothRemoteGATTCharacteristic> {
+    let c = this.chars.get(uuid);
+    if (!c) {
+      if (!this.service) throw new Error("Not connected");
+      c = await this.service.getCharacteristic(uuid);
+      this.chars.set(uuid, c);
+    }
+    return c;
   }
 
   protected rawDisconnect(): void {
@@ -337,13 +331,13 @@ export class WebBleClient extends PrinterClient {
       this.device.gatt.disconnect();
     }
     this.device = null;
-    this.writeChar = null;
-    this.notifyChar = null;
+    this.service = null;
+    this.chars.clear();
   }
 
-  protected async rawWrite(data: Uint8Array): Promise<void> {
-    if (!this.writeChar) throw new Error("Not connected");
-    await this.writeChar.writeValueWithoutResponse(data);
+  protected async rawWrite(data: Uint8Array, charUuid: string): Promise<void> {
+    const c = await this.getChar(charUuid);
+    await c.writeValueWithoutResponse(data);
   }
 }
 
@@ -354,10 +348,10 @@ export class WebBleClient extends PrinterClient {
 export class CapBleClient extends PrinterClient {
   private deviceId: string | null = null;
 
-  protected async rawConnect(opts?: {
-    deviceId?: string;
-    deviceName?: string;
-  }): Promise<{ deviceName?: string }> {
+  protected async rawConnect(
+    opts: { deviceId?: string; deviceName?: string } | undefined,
+    pick: DriverPicker,
+  ): Promise<{ deviceName?: string }> {
     const { BleClient } = await import("@capacitor-community/bluetooth-le");
 
     if (!opts?.deviceId) {
@@ -368,15 +362,20 @@ export class CapBleClient extends PrinterClient {
     // manifest only declares up to Android 11, so connecting would fail
     await BleClient.initialize({ androidNeverForLocation: true });
 
-    this.deviceId = opts.deviceId;
+    const deviceId = opts.deviceId;
+    await BleClient.connect(deviceId, () => this.onDisconnected());
 
-    await BleClient.connect(opts.deviceId, () => this.onDisconnected());
+    let driver: PrinterDriver;
+    try {
+      driver = await pick(opts.deviceName, async () => (await BleClient.getServices(deviceId)).map((s) => s.uuid));
+    } catch (e) {
+      await BleClient.disconnect(deviceId).catch(() => {});
+      throw e;
+    }
+    this.deviceId = deviceId;
 
-    await BleClient.startNotifications(
-      opts.deviceId,
-      SERVICE_UUID,
-      NOTIFY_CHAR_UUID,
-      (value: DataView) => this.handleNotify(new Uint8Array(value.buffer)),
+    await BleClient.startNotifications(deviceId, driver.serviceUuid, driver.notifyCharUuid, (value: DataView) =>
+      this.handleNotify(new Uint8Array(value.buffer, value.byteOffset, value.byteLength).slice()),
     );
 
     return { deviceName: opts.deviceName };
@@ -392,13 +391,13 @@ export class CapBleClient extends PrinterClient {
     }
   }
 
-  protected async rawWrite(data: Uint8Array): Promise<void> {
-    if (!this.deviceId) throw new Error("Not connected");
+  protected async rawWrite(data: Uint8Array, charUuid: string): Promise<void> {
+    if (!this.deviceId || !this.driver) throw new Error("Not connected");
     const { BleClient } = await import("@capacitor-community/bluetooth-le");
     await BleClient.writeWithoutResponse(
       this.deviceId,
-      SERVICE_UUID,
-      WRITE_CHAR_UUID,
+      this.driver.serviceUuid,
+      charUuid,
       new DataView(data.buffer, data.byteOffset, data.byteLength),
     );
   }

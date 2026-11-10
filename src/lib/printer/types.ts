@@ -42,6 +42,8 @@ export interface PrinterInfo {
 
 export interface PrinterModelMeta {
   model: string;
+  /** Which printer family driver handles it */
+  driver: "d11s" | "mxw01";
   printheadPixels: number;
   printDirection: PrintDirection;
   densityMin: number;
