@@ -238,7 +238,7 @@
     "params.label.rolls.wide": "Rollos de 57 mm",
     "params.label.auto": "auto",
     "params.label.auto_length": "Largo automático",
-    "params.label.auto_length.hint": "Imprime solo lo largo que sea el contenido de la etiqueta.",
+    "params.label.auto_length.hint": "El área de diseño crece con lo que hay en la etiqueta, y la impresión mide solo lo que el contenido.",
     "params.label.printable_note.wide": "La impresora llega a los {printable} mm centrales del papel de {label} mm de ancho; los lados quedan en blanco.",
     "params.label.size_hint.wide": "Ancho × largo en mm. La impresora llega a los 48 mm centrales de un rollo de 57 mm.",
     "params.label.warning.printer": "Este tamaño de etiqueta es para otra impresora:",

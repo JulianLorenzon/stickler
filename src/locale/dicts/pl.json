@@ -238,7 +238,7 @@
     "params.label.rolls.wide": "Rolki 57 mm",
     "params.label.auto": "auto",
     "params.label.auto_length": "Automatyczna długość",
-    "params.label.auto_length.hint": "Drukuje tylko tak długo, jak treść etykiety.",
+    "params.label.auto_length.hint": "Obszar projektu rośnie razem z zawartością etykiety, a wydruk jest tylko tak długi jak treść.",
     "params.label.printable_note.wide": "Drukarka sięga środkowych {printable} mm papieru o szerokości {label} mm; boki zostają puste.",
     "params.label.size_hint.wide": "Szerokość × długość w mm. Drukarka sięga środkowych 48 mm rolki 57 mm.",
     "params.label.warning.printer": "Ten rozmiar etykiety jest dla innej drukarki:",

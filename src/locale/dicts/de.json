@@ -238,7 +238,7 @@
     "params.label.rolls.wide": "57-mm-Rollen",
     "params.label.auto": "auto",
     "params.label.auto_length": "Automatische Länge",
-    "params.label.auto_length.hint": "Druckt nur so lang wie der Inhalt des Etiketts.",
+    "params.label.auto_length.hint": "Die Entwurfsfläche wächst mit dem Inhalt des Etiketts, und der Druck ist nur so lang wie der Inhalt.",
     "params.label.printable_note.wide": "Der Drucker erreicht die mittleren {printable} mm des {label} mm breiten Papiers; die Ränder bleiben leer.",
     "params.label.size_hint.wide": "Breite × Länge in mm. Der Drucker erreicht die mittleren 48 mm einer 57-mm-Rolle.",
     "params.label.warning.printer": "Diese Etikettengröße ist für einen anderen Drucker:",

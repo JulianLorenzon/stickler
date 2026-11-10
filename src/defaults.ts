@@ -50,12 +50,17 @@ export const MXW01_ROLLS: LabelPreset[] = [
   { printer: "mxw01", width: 57, height: 60, unit: "mm", dpmm: 8, printDirection: "top", shape: "rect", title: "57×60 mm" },
 ];
 
-/** Design area for "auto length": prints only as long as the content */
+/** "Auto length": the design area follows the content (at least 60 mm, 20 mm free after it, 10 mm steps) */
+export const AUTO_LENGTH_MIN = 60 * DOTS_PER_MM;
+export const AUTO_LENGTH_ROOM = 20 * DOTS_PER_MM;
+export const AUTO_LENGTH_STEP = 10 * DOTS_PER_MM;
+
+/** Design area for "auto length": grows with the content, prints only as long as the content */
 export const MXW01_AUTO_LENGTH: LabelPreset = {
   printer: "mxw01",
   autoLength: true,
   width: 57,
-  height: 100,
+  height: 60,
   unit: "mm",
   dpmm: 8,
   printDirection: "top",

@@ -238,7 +238,7 @@
     "params.label.rolls.wide": "Rollen van 57 mm",
     "params.label.auto": "auto",
     "params.label.auto_length": "Automatische lengte",
-    "params.label.auto_length.hint": "Print alleen zo lang als wat er op het label staat.",
+    "params.label.auto_length.hint": "Het ontwerpvlak groeit mee met wat er op het label staat, en de afdruk is maar zo lang als de inhoud.",
     "params.label.printable_note.wide": "De printer bereikt de middelste {printable} mm van het {label} mm brede papier; de zijkanten blijven leeg.",
     "params.label.size_hint.wide": "Breedte × lengte in mm. De printer bereikt de middelste 48 mm van een rol van 57 mm.",
     "params.label.warning.printer": "Dit labelformaat is voor een andere printer:",

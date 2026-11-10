@@ -34,6 +34,10 @@
     DEFAULT_ROTATION_SNAP,
     GRID_SIZE,
     ROTATION_STICKY_RIGHT_ANGLE,
+    AUTO_LENGTH_MIN,
+    AUTO_LENGTH_ROOM,
+    AUTO_LENGTH_STEP,
+    feedAxis,
     withPrintStartMargin,
   } from "$/defaults";
   import { LabelDesignerUtils } from "$/utils/label_designer_utils";
@@ -95,6 +99,45 @@
   };
 
   undo.onLabelUpdate = loadLabelData;
+
+  /**
+   * "Auto length" labels: the design area follows the content along the paper feed, the end of the content plus
+   * AUTO_LENGTH_ROOM of free space, never shorter than the preset. Returns true if the size changed.
+   */
+  const fitAutoLength = (growOnly = false): boolean => {
+    if (!fabricCanvas || !labelProps.autoLength || undo.paused) return false;
+    const axis = feedAxis(labelProps);
+    let end = 0;
+    for (const o of fabricCanvas.getObjects()) {
+      const r = o.getBoundingRect();
+      end = Math.max(end, axis === "height" ? r.top + r.height : r.left + r.width);
+    }
+    const step = AUTO_LENGTH_STEP;
+    let want = Math.max(AUTO_LENGTH_MIN, Math.ceil((end + AUTO_LENGTH_ROOM) / step) * step);
+    const current = labelProps.size[axis];
+    if (growOnly) want = Math.max(want, current);
+    if (want === current) return false;
+    const paper = labelProps.paper;
+    labelProps = {
+      ...labelProps,
+      size: { ...labelProps.size, [axis]: want },
+      ...(paper ? { paper: { ...paper, [axis]: want } } : {}),
+    };
+    fabricCanvas.setLabelProps(labelProps);
+    fabricCanvas.fitLabel();
+    try {
+      LocalStoragePersistence.saveLastLabelProps(labelProps);
+    } catch (e) {
+      Toasts.zodErrors(e, "Label parameters save error:");
+    }
+    return true;
+  };
+
+  /** Undo snapshot of the canvas and label; auto length labels get their size fitted first */
+  const pushUndo = () => {
+    fitAutoLength();
+    undo.push(fabricCanvas!, labelProps);
+  };
   undo.onStateUpdate = (state: UndoState) => {
     undoState = state;
   };
@@ -105,12 +148,12 @@
   };
 
   const cloneSelected = () => {
-    LabelDesignerUtils.cloneSelection(fabricCanvas!).then(() => undo.push(fabricCanvas!, labelProps));
+    LabelDesignerUtils.cloneSelection(fabricCanvas!).then(() => pushUndo());
   };
 
   const moveSelected = (direction: MoveDirection, ctrl?: boolean) => {
     LabelDesignerUtils.moveSelection(fabricCanvas!, direction, ctrl);
-    undo.push(fabricCanvas!, labelProps);
+    pushUndo();
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -176,7 +219,7 @@
     fabricCanvas!.fitLabel();
     try {
       LocalStoragePersistence.saveLastLabelProps(labelProps);
-      undo.push(fabricCanvas!, labelProps);
+      pushUndo();
     } catch (e) {
       Toasts.zodErrors(e, "Label parameters save error:");
     }
@@ -187,7 +230,7 @@
   };
 
   const onLoadRequested = (label: ExportedLabelTemplate) => {
-    loadLabelData(label).then(() => undo.push(fabricCanvas!, labelProps));
+    loadLabelData(label).then(() => pushUndo());
   };
 
   const onObjectPicked = (objectType: OjectType) => {
@@ -197,7 +240,7 @@
         .then((img) => {
           fabricCanvas!.setActiveObject(img);
           fabricCanvas!.requestRenderAll();
-          undo.push(fabricCanvas!, labelProps);
+          pushUndo();
         })
         .catch(() => {}); // already shown as a toast
       return;
@@ -206,7 +249,7 @@
     const obj = LabelDesignerObjectHelper.addObject(fabricCanvas!, objectType);
     if (obj !== undefined) {
       fabricCanvas!.setActiveObject(obj);
-      undo.push(fabricCanvas!, labelProps);
+      pushUndo();
     }
   };
 
@@ -231,7 +274,7 @@
     }
     fabricCanvas!.setActiveObject(obj);
     fabricCanvas!.requestRenderAll();
-    undo.push(fabricCanvas!, labelProps);
+    pushUndo();
   };
 
   const onIconPicked = (i: MaterialIcon) => {
@@ -240,12 +283,12 @@
       fontFamily: "Material Icons",
       fontSize: 100,
     });
-    undo.push(fabricCanvas!, labelProps);
+    pushUndo();
   };
 
   const onSvgIconPicked = (i: string) => {
     LabelDesignerObjectHelper.addSvg(fabricCanvas!, i);
-    undo.push(fabricCanvas!, labelProps);
+    pushUndo();
   };
 
   const openPreview = () => {
@@ -307,7 +350,7 @@
       selectedObject.dirty = true;
       // Holding a stepper button or typing changes the value many times; keep that as one undo step
       clearTimeout(undoTimer);
-      undoTimer = setTimeout(() => undo.push(fabricCanvas!, labelProps), 400);
+      undoTimer = setTimeout(() => pushUndo(), 400);
     }
     fabricCanvas!.requestRenderAll();
 
@@ -326,7 +369,7 @@
       originY: "top",
     });
     fabricCanvas!.setActiveObject(obj);
-    undo.push(fabricCanvas!, labelProps);
+    pushUndo();
   };
 
   const onPaste = async (event: ClipboardEvent) => {
@@ -345,7 +388,7 @@
 
       if (obj !== undefined) {
         fabricCanvas!.setActiveObject(obj);
-        undo.push(fabricCanvas!, labelProps);
+        pushUndo();
       }
     }
   };
@@ -354,7 +397,7 @@
     if (!confirm($tr("editor.clear.confirm"))) {
       return;
     }
-    undo.push(fabricCanvas!, labelProps);
+    pushUndo();
     fabricCanvas!.clear();
   };
 
@@ -440,7 +483,7 @@
 
     await loadDefaultLabel();
 
-    undo.push(fabricCanvas, labelProps);
+    pushUndo();
 
     // force close dropdowns on touch devices
     fabricCanvas.on("mouse:down", (): void => {
@@ -468,15 +511,17 @@
     });
 
     fabricCanvas.on("object:modified", (): void => {
-      undo.push(fabricCanvas!, labelProps);
+      pushUndo();
     });
 
     fabricCanvas.on("text:changed", () => {
+      // Typing more lines makes room right away; shrinking waits for the edit to end
+      fitAutoLength(true);
       editRevision++;
     });
 
     fabricCanvas.on("object:removed", (): void => {
-      undo.push(fabricCanvas!, labelProps);
+      pushUndo();
     });
 
     fabricCanvas.on("selection:created", (e): void => {
@@ -518,7 +563,7 @@
         }
 
         if (dropped) {
-          undo.push(fabricCanvas!, labelProps);
+          pushUndo();
         }
       }
     });

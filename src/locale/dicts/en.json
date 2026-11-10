@@ -238,7 +238,7 @@
     "params.label.rolls.wide": "57 mm rolls",
     "params.label.auto": "auto",
     "params.label.auto_length": "Auto length",
-    "params.label.auto_length.hint": "Prints only as long as what's on the label.",
+    "params.label.auto_length.hint": "The design area grows with what's on the label, and the print is only as long as the content.",
     "params.label.printable_note.wide": "The printer reaches the middle {printable} mm of the {label} mm wide paper; the sides stay blank.",
     "params.label.size_hint.wide": "Width × length in mm. The printer reaches the middle 48 mm of a 57 mm roll.",
     "params.label.warning.printer": "This label size is for another printer:",

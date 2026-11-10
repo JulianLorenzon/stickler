@@ -158,9 +158,11 @@
     const target = makeLabelProps(preset);
     const a = paperDots(target);
     const b = paperDots(labelProps);
+    // An auto length label's length changes with its content: only the width across the paper counts
+    const sameLength = !!target.autoLength && !!labelProps.autoLength;
     return (
-      a.width === b.width &&
-      a.height === b.height &&
+      (a.width === b.width || (sameLength && target.printDirection === "left")) &&
+      (a.height === b.height || (sameLength && target.printDirection === "top")) &&
       target.printDirection === labelProps.printDirection &&
       printerOf(target) === printerOf(labelProps) &&
       !!target.autoLength === !!labelProps.autoLength &&
