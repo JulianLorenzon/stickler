@@ -231,6 +231,7 @@
     "params.generic.align.right": "Rechts uitlijnen",
     "params.generic.align.top": "Boven uitlijnen",
     "params.generic.align.bottom": "Onder uitlijnen",
+    "params.generic.align.auto_hint": "Automatische lengte: ‘Boven uitlijnen’ zet het aan het begin van de afdruk. Verticaal centreren en ‘Onder uitlijnen’ lijnen het uit met de rest van het ontwerp.",
     "preview.postprocess.smart": "Automatisch (scherpe tekst, gedithered foto's)",
     "preview.postprocess.floyd": "Dithering (Floyd–Steinberg)",
     "preview.postprocess.bluenoise": "Dithering (blauwe ruis)",

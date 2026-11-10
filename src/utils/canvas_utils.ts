@@ -2,6 +2,10 @@ import * as fabric from "fabric";
 import Barcode from "$/fabric-object/barcode";
 import QRCode from "$/fabric-object/qrcode";
 import { CustomCanvas } from "$/fabric-object/custom_canvas";
+import { DOTS_PER_MM, feedAxis } from "$/defaults";
+
+/** Space between a new object and the content before it on an auto length label */
+const AUTO_LENGTH_GAP = 2 * DOTS_PER_MM;
 
 export class CanvasUtils {
   /** Label size in label pixels; the designer canvas element is bigger than the label */
@@ -90,14 +94,75 @@ export class CanvasUtils {
     }
   }
 
+  /**
+   * The axis an "auto length" label grows along (the paper feed), or undefined for labels with a fixed size. Its
+   * length there is only the content plus some free room, so placing and aligning along it can't use the label's
+   * middle or end the way fixed labels do.
+   */
+  static autoLengthAxis(canvas: fabric.Canvas): "width" | "height" | undefined {
+    if (!(canvas instanceof CustomCanvas)) return undefined;
+    const props = canvas.getLabelProps();
+    return props.autoLength ? feedAxis(props) : undefined;
+  }
+
+  /** Start and end of the objects other than `except` along an axis, or undefined when there are none */
+  static contentSpan(
+    canvas: fabric.Canvas,
+    axis: "width" | "height",
+    except?: fabric.FabricObject,
+  ): { start: number; end: number } | undefined {
+    let start = Infinity;
+    let end = -Infinity;
+    for (const o of canvas.getObjects()) {
+      if (o === except) continue;
+      const r = o.getBoundingRect();
+      const [a, len] = axis === "height" ? [r.top, r.height] : [r.left, r.width];
+      start = Math.min(start, a);
+      end = Math.max(end, a + len);
+    }
+    return end > -Infinity ? { start, end } : undefined;
+  }
+
+  /** Move an object so its box starts at `pos` along an axis */
+  static moveAlong(obj: fabric.FabricObject, axis: "width" | "height", pos: number) {
+    obj.setCoords();
+    const r = obj.getBoundingRect();
+    if (axis === "height") obj.set({ top: Math.round(obj.top + pos - r.top) });
+    else obj.set({ left: Math.round(obj.left + pos - r.left) });
+    obj.setCoords();
+  }
+
+  /**
+   * Put a newly added object where it's expected: centered on fixed size labels (or as `fixed` says), on auto length
+   * labels centered across the paper and right after the content already there (at the start on an empty label),
+   * like the next line of a receipt.
+   */
+  static placeNewObject(canvas: fabric.Canvas, obj: fabric.FabricObject, fixed?: () => void) {
+    const axis = CanvasUtils.autoLengthAxis(canvas);
+    if (axis === undefined) {
+      if (fixed) fixed();
+      else canvas.centerObject(obj);
+      obj.setCoords();
+      return;
+    }
+    if (axis === "height") canvas.centerObjectH(obj);
+    else canvas.centerObjectV(obj);
+    const content = CanvasUtils.contentSpan(canvas, axis, obj);
+    CanvasUtils.moveAlong(obj, axis, content ? content.end + AUTO_LENGTH_GAP : 0);
+  }
+
+  /**
+   * Scale a new object (image, SVG) to fit the label with a margin and place it. On auto length labels only the
+   * paper's width limits it: the length grows with the content.
+   */
   static fitObjectIntoCanvas(canvas: fabric.Canvas, obj: fabric.FabricObject, xMargin: number, yMarin: number) {
     const label = CanvasUtils.labelSize(canvas);
-    const widthRatio = label.width / (obj.width + xMargin * 2);
-    const heightRatio = label.height / (obj.height + yMarin * 2);
+    const axis = CanvasUtils.autoLengthAxis(canvas);
+    const widthRatio = axis === "width" ? Infinity : label.width / (obj.width + xMargin * 2);
+    const heightRatio = axis === "height" ? Infinity : label.height / (obj.height + yMarin * 2);
     const scaleFactor = Math.min(widthRatio, heightRatio);
     obj.set({ left: xMargin, top: yMarin });
     obj.scale(scaleFactor);
-    canvas.centerObjectV(obj);
-    canvas.centerObjectH(obj);
+    CanvasUtils.placeNewObject(canvas, obj);
   }
 }

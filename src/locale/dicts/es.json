@@ -231,6 +231,7 @@
     "params.generic.align.right": "Alinear a la derecha",
     "params.generic.align.top": "Alinear arriba",
     "params.generic.align.bottom": "Alinear abajo",
+    "params.generic.align.auto_hint": "Longitud automática: «Alinear arriba» lo lleva al inicio de la impresión. Centrar en vertical y «Alinear abajo» lo alinean con el resto del diseño.",
     "preview.postprocess.smart": "Automático (texto nítido, fotos tramadas)",
     "preview.postprocess.floyd": "Tramado (Floyd–Steinberg)",
     "preview.postprocess.bluenoise": "Tramado (ruido azul)",

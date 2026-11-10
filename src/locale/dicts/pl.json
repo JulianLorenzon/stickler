@@ -231,6 +231,7 @@
     "params.generic.align.right": "Do prawej",
     "params.generic.align.top": "Do góry",
     "params.generic.align.bottom": "Do dołu",
+    "params.generic.align.auto_hint": "Automatyczna długość: „Do góry” przesuwa na początek wydruku. Wyśrodkowanie w pionie i „Do dołu” wyrównują względem reszty projektu.",
     "preview.postprocess.smart": "Automatycznie (ostry tekst, rastrowane zdjęcia)",
     "preview.postprocess.floyd": "Rastrowanie (Floyd–Steinberg)",
     "preview.postprocess.bluenoise": "Rastrowanie (niebieski szum)",

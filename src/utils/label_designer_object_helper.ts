@@ -81,7 +81,7 @@ export class LabelDesignerObjectHelper {
       ...options,
     });
     canvas.add(obj);
-    canvas.centerObject(obj);
+    CanvasUtils.placeNewObject(canvas, obj);
     return obj;
   }
 
@@ -91,7 +91,7 @@ export class LabelDesignerObjectHelper {
       ...options,
     });
     canvas.add(obj);
-    canvas.centerObject(obj);
+    CanvasUtils.placeNewObject(canvas, obj);
     return obj;
   }
 
@@ -106,7 +106,7 @@ export class LabelDesignerObjectHelper {
       { ...OBJECT_DEFAULTS_VECTOR },
     );
     canvas.add(obj);
-    canvas.centerObjectV(obj);
+    CanvasUtils.placeNewObject(canvas, obj, () => canvas.centerObjectV(obj));
     return obj;
   }
 
@@ -116,7 +116,7 @@ export class LabelDesignerObjectHelper {
       radius: OBJECT_SIZE_DEFAULTS.width / 2,
     });
     canvas.add(obj);
-    canvas.centerObjectV(obj);
+    CanvasUtils.placeNewObject(canvas, obj, () => canvas.centerObjectV(obj));
     return obj;
   }
 
@@ -126,7 +126,7 @@ export class LabelDesignerObjectHelper {
       ...OBJECT_DEFAULTS_VECTOR,
     });
     canvas.add(obj);
-    canvas.centerObjectV(obj);
+    CanvasUtils.placeNewObject(canvas, obj, () => canvas.centerObjectV(obj));
     return obj;
   }
 
@@ -137,6 +137,7 @@ export class LabelDesignerObjectHelper {
       ...OBJECT_DEFAULTS,
     });
     canvas.add(qr);
+    CanvasUtils.placeNewObject(canvas, qr, () => {});
     return qr;
   }
 
@@ -148,6 +149,7 @@ export class LabelDesignerObjectHelper {
       encoding: "CODE128B",
     });
     canvas.add(barcode);
+    CanvasUtils.placeNewObject(canvas, barcode, () => {});
     return barcode;
   }
 
@@ -174,14 +176,17 @@ export class LabelDesignerObjectHelper {
       }
       obj = barcode;
     } else {
-      // As big as the label is high, the usual way to fit a QR code on these narrow labels
-      const size = Math.round(Math.min(label.height, label.width));
+      // As big as the label is high, the usual way to fit a QR code on these narrow labels; on auto length labels as
+      // wide as the paper (the length is only the content so far)
+      const axis = CanvasUtils.autoLengthAxis(canvas);
+      const across = axis === "height" ? label.width : axis === "width" ? label.height : undefined;
+      const size = Math.round(across ?? Math.min(label.height, label.width));
       obj = new QRCode({ ...OBJECT_DEFAULTS, text: scan.text, width: size, height: size });
       converted = scan.format !== "QR_CODE";
     }
 
     canvas.add(obj);
-    canvas.centerObject(obj);
+    CanvasUtils.placeNewObject(canvas, obj);
     obj.set({ left: Math.round(obj.left), top: Math.round(obj.top) });
     obj.setCoords();
     return { obj, converted };

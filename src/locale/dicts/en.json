@@ -231,6 +231,7 @@
     "params.generic.align.right": "Align right",
     "params.generic.align.top": "Align top",
     "params.generic.align.bottom": "Align bottom",
+    "params.generic.align.auto_hint": "Auto length: “Align top” moves it to the start of the print. Centering vertically and “Align bottom” line it up with the rest of the design.",
     "preview.postprocess.smart": "Auto (crisp text, dithered photos)",
     "preview.postprocess.floyd": "Dither (Floyd–Steinberg)",
     "preview.postprocess.bluenoise": "Dither (blue noise)",

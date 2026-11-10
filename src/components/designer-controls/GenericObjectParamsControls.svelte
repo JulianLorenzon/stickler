@@ -54,8 +54,50 @@
    * Snap what is actually drawn (glyphs, strokes, rotation included) to the label edges or center,
    * not the object's box: a textbox is usually wider than its text and has room above and below the letters.
    */
+  /**
+   * Auto length labels: the alignments along the paper feed. Their length is only the content plus free room, so
+   * "start" goes to the start of the print and center/end line the object up with the rest of the design.
+   */
+  const ALONG: Record<"width" | "height", { start: Alignment; center: Alignment; end: Alignment }> = {
+    height: { start: "top", center: "center_v", end: "bottom" },
+    width: { start: "left", center: "center_h", end: "right" },
+  };
+  const autoAxis = $derived.by(() => {
+    void editRevision;
+    return selectedObject.canvas ? CanvasUtils.autoLengthAxis(selectedObject.canvas) : undefined;
+  });
+  /** Center/end along the feed need other objects to line up with */
+  const hasOtherContent = $derived.by(() => {
+    void editRevision;
+    const canvas = selectedObject.canvas;
+    return !!canvas && !!autoAxis && CanvasUtils.contentSpan(canvas, autoAxis, selectedObject) !== undefined;
+  });
+  const alignDisabled = (to: Alignment): boolean =>
+    !!autoAxis && !hasOtherContent && (to === ALONG[autoAxis].center || to === ALONG[autoAxis].end);
+
+  const alignAlongFeed = (to: Alignment, axis: "width" | "height") => {
+    const canvas = selectedObject.canvas!;
+    const ink = CanvasUtils.visibleBounds(selectedObject);
+    const [pos, len] = axis === "height" ? [ink.top, ink.height] : [ink.left, ink.width];
+    const others = CanvasUtils.contentSpan(canvas, axis, selectedObject);
+    let target: number;
+    if (to === ALONG[axis].start) target = 0;
+    else if (!others) return;
+    else if (to === ALONG[axis].center) target = (others.start + others.end - len) / 2;
+    else target = others.end - len;
+    const d = Math.round(target - pos);
+    selectedObject.set(axis === "height" ? { top: selectedObject.top + d } : { left: selectedObject.left + d });
+    selectedObject.setCoords();
+    valueUpdated();
+  };
+
   const align = (to: Alignment) => {
     const canvas = selectedObject.canvas!;
+    const axis = CanvasUtils.autoLengthAxis(canvas);
+    if (axis && Object.values(ALONG[axis]).includes(to)) {
+      alignAlongFeed(to, axis);
+      return;
+    }
     const split = canvas instanceof CustomCanvas && (canvas.getLabelProps().split ?? "none") !== "none";
 
     // Split labels center within the part the object is in
@@ -92,6 +134,25 @@
   const fit = () => {
     const canvas = selectedObject.canvas!;
     const label = CanvasUtils.labelSize(canvas);
+
+    // Auto length: fill the paper's width and stay where it is along the paper, which grows to fit
+    const axis = CanvasUtils.autoLengthAxis(canvas);
+    if (axis) {
+      selectedObject.setCoords();
+      const r = selectedObject.getBoundingRect();
+      const start = axis === "height" ? r.top : r.left;
+      if (axis === "height") {
+        selectedObject.scaleToWidth(label.width);
+        canvas.centerObjectH(selectedObject);
+      } else {
+        selectedObject.scaleToHeight(label.height);
+        canvas.centerObjectV(selectedObject);
+      }
+      CanvasUtils.moveAlong(selectedObject, axis, start);
+      valueUpdated();
+      return;
+    }
+
     const imageRatio = selectedObject.width / selectedObject.height;
     const canvasRatio = label.width / label.height;
 
@@ -203,12 +264,15 @@
   <div class="dropdown-menu p-2">
     <div class="align-grid">
       {#each alignments as a (a.value)}
-        <button class="btn btn-sm btn-secondary align-btn" onclick={() => align(a.value)}>
+        <button class="btn btn-sm btn-secondary align-btn" disabled={alignDisabled(a.value)} onclick={() => align(a.value)}>
           <MdIcon icon={a.icon} />
           <span>{$tr(a.label)}</span>
         </button>
       {/each}
     </div>
+    {#if autoAxis}
+      <p class="align-hint">{$tr("params.generic.align.auto_hint")}</p>
+    {/if}
   </div>
 </div>
 
@@ -299,6 +363,13 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 0.25rem;
+  }
+
+  .align-hint {
+    margin: 0.5rem 0 0;
+    max-width: 16rem;
+    font-size: 0.8125rem;
+    color: var(--bs-secondary-color);
   }
 
   .align-btn {

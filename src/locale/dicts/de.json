@@ -231,6 +231,7 @@
     "params.generic.align.right": "Rechts ausrichten",
     "params.generic.align.top": "Oben ausrichten",
     "params.generic.align.bottom": "Unten ausrichten",
+    "params.generic.align.auto_hint": "Automatische Länge: „Oben ausrichten“ setzt es an den Anfang des Drucks. Vertikal zentrieren und „Unten ausrichten“ richten es am restlichen Design aus.",
     "preview.postprocess.smart": "Automatisch (scharfer Text, gerasterte Fotos)",
     "preview.postprocess.floyd": "Dithering (Floyd–Steinberg)",
     "preview.postprocess.bluenoise": "Dithering (Blue Noise)",
