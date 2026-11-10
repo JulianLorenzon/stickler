@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { derived } from "svelte/store";
-  import { appConfig, connectionState, printerClient, printerMeta, refreshRfidInfo } from "$/stores";
+  import { appConfig, connectionState, printerClient, printerMeta } from "$/stores";
   import {
     copyImageData,
     threshold,
@@ -113,7 +113,6 @@
         await $printerClient.abstraction.printEnd();
       }
 
-      refreshRfidInfo();
 
       $printerClient.startHeartbeat();
     }

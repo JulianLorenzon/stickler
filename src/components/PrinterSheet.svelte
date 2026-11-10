@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { SoundSettingsItemType, Utils } from "$/lib/printer";
+  import { Utils } from "$/lib/printer";
   import {
     printerClient,
     connectedPrinterName,
@@ -8,15 +8,11 @@
     heartbeatData,
     printerInfo,
     printerMeta,
-    rfidInfo,
-    ribbonRfidInfo,
-    refreshRfidInfo,
     lastPrinter,
   } from "$/stores";
   import { tr } from "$/utils/i18n";
   import AppModal from "$/components/basic/AppModal.svelte";
   import MdIcon from "$/components/basic/MdIcon.svelte";
-  import FirmwareUpdater from "$/components/basic/FirmwareUpdater.svelte";
   import BatteryIndicator from "$/components/basic/BatteryIndicator.svelte";
   import {
     connectNative,
@@ -27,6 +23,7 @@
     type FoundPrinter,
   } from "$/utils/printer_connection";
   import type { MaterialIcon } from "material-icons";
+  import { Toasts } from "$/utils/toasts";
 
   let { show = $bindable() }: { show: boolean } = $props();
 
@@ -94,6 +91,63 @@
     return "signal_cellular_alt_1_bar";
   };
 
+  // Auto power off (printers that support it): read once per connection
+  const AUTO_OFF_CHOICES = [5, 10, 20, 30, 60, 120, 240, 480];
+  let autoOff = $state<number | undefined>();
+  let autoOffBusy = $state(false);
+  let autoOffReadFor: unknown = undefined;
+  const autoOffSupported = $derived(connected && $printerClient?.getDriver()?.autoOff !== undefined);
+  const autoOffChoices = $derived(
+    autoOff === undefined || AUTO_OFF_CHOICES.includes(autoOff)
+      ? AUTO_OFF_CHOICES
+      : [...AUTO_OFF_CHOICES, autoOff].sort((a, b) => a - b),
+  );
+
+  $effect(() => {
+    if (!autoOffSupported) {
+      autoOff = undefined;
+      autoOffReadFor = undefined;
+      return;
+    }
+    if (!show || autoOffReadFor === $printerInfo) return;
+    autoOffReadFor = $printerInfo;
+    $printerClient
+      .getAutoOff()
+      .then((m) => (autoOff = m))
+      .catch(console.error);
+  });
+
+  const formatMinutes = (m: number): string =>
+    m % 60 === 0 && m >= 60
+      ? $tr("connector.auto_off.hours").replace("{n}", String(m / 60))
+      : $tr("connector.auto_off.minutes").replace("{n}", String(m));
+
+  const onAutoOffChange = async (e: Event) => {
+    const minutes = Number((e.currentTarget as HTMLSelectElement).value);
+    const previous = autoOff;
+    autoOff = minutes;
+    autoOffBusy = true;
+    try {
+      if (!(await $printerClient.setAutoOff(minutes))) throw new Error($tr("connector.auto_off.failed"));
+    } catch (err) {
+      autoOff = previous;
+      Toasts.error(err);
+    } finally {
+      autoOffBusy = false;
+    }
+  };
+
+  const canReset = $derived(connected && $printerClient?.getDriver()?.factoryReset !== undefined);
+
+  const resetPrinter = async () => {
+    if (!confirm($tr("connector.tools.reset.confirm"))) return;
+    try {
+      await $printerClient.abstraction.printerReset();
+    } catch (err) {
+      Toasts.error(err);
+    }
+  };
+
   const sortedFound = $derived([...found].sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999)));
 
   onMount(() => {
@@ -136,6 +190,28 @@
       </div>
     {/if}
 
+    {#if autoOffSupported}
+      <div class="auto-off mt-3">
+        <label for="auto-off" class="flex-grow-1 min-w-0">
+          {$tr("connector.auto_off")}
+          <span class="d-block small text-secondary">{$tr("connector.auto_off.hint")}</span>
+        </label>
+        <select
+          id="auto-off"
+          class="form-select"
+          value={autoOff ?? ""}
+          disabled={autoOff === undefined || autoOffBusy}
+          onchange={onAutoOffChange}>
+          {#if autoOff === undefined}
+            <option value="">…</option>
+          {/if}
+          {#each autoOffChoices as m (m)}
+            <option value={m}>{formatMinutes(m)}</option>
+          {/each}
+        </select>
+      </div>
+    {/if}
+
     <button class="btn btn-outline-danger w-100 mt-3" onclick={disconnect}>
       <MdIcon icon="bluetooth_disabled" />
       {$tr("connector.disconnect")}
@@ -175,24 +251,6 @@
           </dl>
         {/if}
 
-        {#if $rfidInfo || $ribbonRfidInfo}
-          <div class="kv-title d-flex align-items-center">
-            RFID
-            <button class="btn btn-sm btn-link ms-auto p-0" onclick={refreshRfidInfo}>
-              <MdIcon icon="refresh" />
-            </button>
-          </div>
-          <dl class="kv">
-            {#each Object.entries($rfidInfo ?? {}) as [key, value] (key)}
-              <dt>{key}</dt>
-              <dd>{value ?? "-"}</dd>
-            {/each}
-            {#each Object.entries($ribbonRfidInfo ?? {}) as [key, value] (key)}
-              <dt>ribbon.{key}</dt>
-              <dd>{value ?? "-"}</dd>
-            {/each}
-          </dl>
-        {/if}
       </div>
 
       <div class="kv-title">{$tr("connector.details.tools")}</div>
@@ -200,34 +258,12 @@
         <button class="btn btn-sm btn-secondary" onclick={() => $printerClient.fetchPrinterInfo()}>
           <MdIcon icon="refresh" /> {$tr("connector.tools.fetch_info")}
         </button>
-        <button
-          class="btn btn-sm btn-secondary"
-          onclick={async () => {
-            await $printerClient.abstraction.setSoundEnabled(SoundSettingsItemType.BluetoothConnectionSound, true);
-            await $printerClient.abstraction.setSoundEnabled(SoundSettingsItemType.PowerSound, true);
-          }}>
-          <MdIcon icon="volume_up" /> {$tr("connector.tools.sound_on")}
-        </button>
-        <button
-          class="btn btn-sm btn-secondary"
-          onclick={async () => {
-            await $printerClient.abstraction.setSoundEnabled(SoundSettingsItemType.BluetoothConnectionSound, false);
-            await $printerClient.abstraction.setSoundEnabled(SoundSettingsItemType.PowerSound, false);
-          }}>
-          <MdIcon icon="volume_off" /> {$tr("connector.tools.sound_off")}
-        </button>
-        <button class="btn btn-sm btn-secondary" onclick={() => $printerClient.startHeartbeat()}>
-          {$tr("connector.tools.heartbeat_on")}
-        </button>
-        <button class="btn btn-sm btn-secondary" onclick={() => $printerClient.stopHeartbeat()}>
-          {$tr("connector.tools.heartbeat_off")}
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick={() => $printerClient.abstraction.printerReset()}>
-          <MdIcon icon="restart_alt" /> {$tr("connector.tools.reset")}
-        </button>
+        {#if canReset}
+          <button class="btn btn-sm btn-outline-danger" onclick={resetPrinter}>
+            <MdIcon icon="restart_alt" /> {$tr("connector.tools.reset")}
+          </button>
+        {/if}
       </div>
-
-      <div class="mt-3"><FirmwareUpdater /></div>
     </details>
   {:else if transports.capacitorBle}
     {#if $lastPrinter}
@@ -323,6 +359,17 @@
 </AppModal>
 
 <style>
+  .auto-off {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .auto-off .form-select {
+    width: auto;
+    min-height: 44px;
+  }
+
   .printer-card {
     display: flex;
     align-items: center;

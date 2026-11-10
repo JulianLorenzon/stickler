@@ -21,7 +21,6 @@ import type {
   PrinterModelMeta,
   PrintProgressEvent,
   FirmwareProgressEvent,
-  RfidInfo,
   Packet,
   PrintTaskName,
 } from "./types";
@@ -91,23 +90,31 @@ export abstract class PrinterClient extends TypedEventEmitter<ClientEventMap> {
     printerReset: async () => {
       await this.requireDriver().factoryReset?.(this.io);
     },
-
-    rfidInfo: async (): Promise<RfidInfo> => {
-      return {};
-    },
-
-    rfidInfo2: async (): Promise<RfidInfo> => {
-      return {};
-    },
-
-    setSoundEnabled: async (_type: number, _enabled: boolean) => {
-      // Not supported
-    },
-
-    firmwareUpgrade: async (_data: Uint8Array, _version: string) => {
-      throw new Error("Firmware upgrade not implemented");
-    },
   };
+
+  /** Run printer commands with the heartbeat paused, so its replies don't mix with theirs */
+  private async withoutHeartbeat<T>(fn: () => Promise<T>): Promise<T> {
+    const wasRunning = this.heartbeatTimer !== undefined;
+    this.stopHeartbeat();
+    try {
+      return await fn();
+    } finally {
+      if (wasRunning && this._connected) this.startHeartbeat();
+    }
+  }
+
+  /** Auto power off in minutes; undefined if the printer can't tell */
+  async getAutoOff(): Promise<number | undefined> {
+    const autoOff = this.requireDriver().autoOff;
+    if (!autoOff) return undefined;
+    return this.withoutHeartbeat(() => autoOff.get(this.io));
+  }
+
+  async setAutoOff(minutes: number): Promise<boolean> {
+    const autoOff = this.requireDriver().autoOff;
+    if (!autoOff) return false;
+    return this.withoutHeartbeat(() => autoOff.set(this.io, minutes));
+  }
 
   private requireDriver(): PrinterDriver {
     if (!this.driver) throw new Error("Not connected");

@@ -157,4 +157,17 @@ export const d11sDriver: PrinterDriver = {
   async factoryReset(io) {
     await io.sendCommand(CMD.factoryReset, true);
   },
+
+  autoOff: {
+    async get(io) {
+      const r = await io.sendCommand(CMD.getShutdownTime, true);
+      return r.length >= 2 ? (r[r.length - 2] << 8) | r[r.length - 1] : undefined;
+    },
+    async set(io, minutes) {
+      const r = await io.sendCommand(CMD.setShutdownTime(minutes), true, 3000);
+      return decodeText(r).endsWith("OK");
+    },
+    min: 1,
+    max: 480,
+  },
 };

@@ -4,31 +4,6 @@ export enum LabelType {
   Continuous = 3,
 }
 
-export enum SoundSettingsItemType {
-  BluetoothConnectionSound = 1,
-  PowerSound = 2,
-}
-
-export enum RequestCommandId {
-  GetModel = 0x20f0,
-  GetFirmware = 0x20f1,
-  GetSerial = 0x20f2,
-  GetBattery = 0x50f1,
-  GetStatus = 0x0040,
-  SetDensity = 0x1000,
-  SetPaperType = 0x0084,
-  EnablePrinter = 0xfe01,
-  StopPrint = 0xfe45,
-  FormFeed = 0x1d0c,
-  RasterData = 0x7630,
-}
-
-export enum ResponseCommandId {
-  Ok = 0x4f4b,
-  Ack = 0x00aa,
-  Error = 0x00ff,
-}
-
 export type PrintDirection = "left" | "top";
 
 export interface PrinterInfo {
@@ -56,12 +31,6 @@ export interface HeartbeatData {
   chargeLevel?: number;
   charging?: boolean;
   statusByte?: number;
-  paperRfidSuccess?: boolean;
-  ribbonRfidSuccess?: boolean;
-}
-
-export interface RfidInfo {
-  [key: string]: string | number | boolean | undefined;
 }
 
 export interface AvailableTransports {

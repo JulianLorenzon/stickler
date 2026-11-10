@@ -2,9 +2,6 @@ export { CLIENT_DEFAULTS, PRINTHEAD_PX } from "./constants";
 
 export {
   LabelType,
-  SoundSettingsItemType,
-  RequestCommandId,
-  ResponseCommandId,
   printTaskNames,
 } from "./types";
 
@@ -13,7 +10,6 @@ export type {
   PrinterInfo,
   PrinterModelMeta,
   HeartbeatData,
-  RfidInfo,
   AvailableTransports,
   ConnectionInfo,
   EncodedImage,

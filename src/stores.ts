@@ -16,15 +16,12 @@ import {
   type ConnectionState,
 } from "$/types";
 import {
-  RequestCommandId,
-  ResponseCommandId,
   Utils,
   instantiateClient,
   type HeartbeatData,
   type PrinterClient,
   type PrinterInfo,
   type PrinterModelMeta,
-  type RfidInfo,
 } from "$/lib/printer";
 import { Toasts } from "$/utils/toasts";
 import { tr } from "$/utils/i18n";
@@ -44,8 +41,6 @@ export const connectedPrinterName = writable<string>("");
 export const printerClient = writable<PrinterClient>();
 export const heartbeatData = writable<HeartbeatData>();
 export const printerInfo = writable<PrinterInfo>();
-export const rfidInfo = writable<RfidInfo | undefined>();
-export const ribbonRfidInfo = writable<RfidInfo | undefined>();
 export const printerMeta = writable<PrinterModelMeta | undefined>();
 export const heartbeatFails = writable<number>(0);
 /** Last printer connected via native BLE, used for one-tap / automatic reconnect */
@@ -71,21 +66,6 @@ export const automation = readable<AutomationProps | undefined>(
   })(),
 );
 
-export const refreshRfidInfo = () => {
-  const client = get(printerClient);
-
-  if (!client) {
-    return;
-  }
-
-  client.abstraction.rfidInfo().then(rfidInfo.set).catch(console.error);
-
-  client.abstraction
-    .rfidInfo2()
-    .then(ribbonRfidInfo.set)
-    .catch(() => {});
-};
-
 export const initClient = () => {
   printerClient.update((prevClient: PrinterClient) => {
     let newClient: PrinterClient = prevClient;
@@ -103,11 +83,11 @@ export const initClient = () => {
       }
 
       newClient.on("packetsent", (e) => {
-        console.log(`>> ${Utils.bufToHex(e.packet.toBytes())} (${RequestCommandId[e.packet.command]})`);
+        console.log(`>> ${Utils.bufToHex(e.packet.toBytes())}`);
       });
 
       newClient.on("packetreceived", (e) => {
-        console.log(`<< ${Utils.bufToHex(e.packet.toBytes())} (${ResponseCommandId[e.packet.command]})`);
+        console.log(`<< ${Utils.bufToHex(e.packet.toBytes())}`);
       });
 
       newClient.on("connect", (e) => {
@@ -135,15 +115,7 @@ export const initClient = () => {
 
       newClient.on("heartbeat", (e) => {
         heartbeatFails.set(0);
-        heartbeatData.update((prev) => {
-          if (
-            prev?.paperRfidSuccess !== e.data?.paperRfidSuccess ||
-            prev?.ribbonRfidSuccess !== e.data?.ribbonRfidSuccess
-          ) {
-            refreshRfidInfo();
-          }
-          return e.data;
-        });
+        heartbeatData.set(e.data);
       });
 
       newClient.on("heartbeatfailed", (e) => {

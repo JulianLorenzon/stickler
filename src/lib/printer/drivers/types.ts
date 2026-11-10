@@ -42,6 +42,16 @@ export interface PrinterDriver {
   meta(info: PrinterInfo): PrinterModelMeta;
   newPrintTask(io: DriverIO, opts: PrintTaskOptions): AbstractPrintTask;
   factoryReset?(io: DriverIO): Promise<void>;
+  /** Idle time before the printer switches itself off, if it can be read and changed */
+  autoOff?: {
+    /** Minutes, or undefined if there was no answer */
+    get(io: DriverIO): Promise<number | undefined>;
+    /** Returns false if the printer didn't confirm */
+    set(io: DriverIO, minutes: number): Promise<boolean>;
+    /** Allowed range in minutes */
+    min: number;
+    max: number;
+  };
 }
 
 export type PrinterDriverId = "d11s" | "mxw01";
