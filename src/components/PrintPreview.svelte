@@ -134,8 +134,11 @@
     FileUtils.printImageUrls(sources);
   };
 
-  /** Blank paper kept before and after the content with "auto length": 2 mm */
-  const AUTO_LENGTH_MARGIN = 16;
+  /**
+   * Blank rows kept before and after the content with "auto length". None: the MXW01 already leaves ~8.5 mm before
+   * a print (head to tear bar) and ~6 mm after it (it feeds ~14.5 mm after every job)
+   */
+  const AUTO_LENGTH_MARGIN = 0;
 
   /** Send one image to the printer and wait until it's out. Returns false if sending failed */
   const printImage = async (canvas: HTMLCanvasElement, copies: number): Promise<boolean> => {
