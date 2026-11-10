@@ -298,6 +298,7 @@
     "about.credits": "Créditos",
     "about.credit.fichero": "Descifró el protocolo de la D11s y escribió la herramienta en Python y la primera versión web en la que se basa esta app.",
     "about.credit.niimblue": "El diseñador de etiquetas del que nació esta app.",
+    "about.credit.mxw01": "Documentó el protocolo de la impresora MXW01, en el que se basa el soporte para la MXW01. Implementación propia.",
     "about.credit.canvasdither": "El código de umbral y de tramado Atkinson.",
     "about.credit.werness": "La idea del tramado Werness: el método de Brent Werness, tal como lo describió Lucas Pope para Return of the Obra Dinn. Implementación propia.",
     "about.license": "Licencia",

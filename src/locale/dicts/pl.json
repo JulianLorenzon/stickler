@@ -298,6 +298,7 @@
     "about.credits": "Podziękowania",
     "about.credit.fichero": "Rozpracował protokół D11s i napisał narzędzie w Pythonie oraz pierwszą wersję webową, na której opiera się ta aplikacja.",
     "about.credit.niimblue": "Edytor etykiet, z którego wyrosła ta aplikacja.",
+    "about.credit.mxw01": "Opisał protokół drukarki MXW01, na którym opiera się obsługa MXW01. Własna implementacja.",
     "about.credit.canvasdither": "Kod progu i rastrowania Atkinsona.",
     "about.credit.werness": "Pomysł na rastrowanie Werness: metoda Brenta Wernessa, tak jak opisał ją Lucas Pope przy Return of the Obra Dinn. Własna implementacja.",
     "about.license": "Licencja",

@@ -34,6 +34,13 @@
       license: "MIT",
       what: "about.credit.canvasdither",
     },
+    {
+      name: "MXW01-catprinter",
+      by: "dave9123",
+      url: "https://github.com/dave9123/MXW01-catprinter",
+      license: "MIT",
+      what: "about.credit.mxw01",
+    },
     { name: "Werness dithering", by: "Brent Werness, Lucas Pope", what: "about.credit.werness" },
   ];
 

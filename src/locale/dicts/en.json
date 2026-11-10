@@ -298,6 +298,7 @@
     "about.credits": "Credits",
     "about.credit.fichero": "Reverse engineered the D11s protocol and wrote the Python tool and the first web version this app is built on.",
     "about.credit.niimblue": "The label designer this app grew from.",
+    "about.credit.mxw01": "Documented the MXW01 printer's protocol, which the MXW01 support follows. Our own implementation.",
     "about.credit.canvasdither": "The threshold and Atkinson dithering code.",
     "about.credit.werness": "The idea behind the Werness dither mode: Brent Werness's method, as Lucas Pope described it for Return of the Obra Dinn. Our own implementation.",
     "about.license": "Licence",

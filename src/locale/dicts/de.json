@@ -298,6 +298,7 @@
     "about.credits": "Danksagung",
     "about.credit.fichero": "Hat das D11s-Protokoll entschlüsselt und das Python-Tool und die erste Webversion geschrieben, auf denen diese App aufbaut.",
     "about.credit.niimblue": "Der Etiketten-Designer, aus dem diese App entstanden ist.",
+    "about.credit.mxw01": "Hat das Protokoll des MXW01-Druckers dokumentiert, nach dem die MXW01-Unterstützung arbeitet. Eigene Umsetzung.",
     "about.credit.canvasdither": "Der Code für Schwellenwert und Atkinson-Dithering.",
     "about.credit.werness": "Die Idee hinter dem Werness-Dithering: die Methode von Brent Werness, wie Lucas Pope sie für Return of the Obra Dinn beschrieben hat. Eigene Umsetzung.",
     "about.license": "Lizenz",

@@ -298,6 +298,7 @@
     "about.credits": "Met dank aan",
     "about.credit.fichero": "Heeft het D11s-protocol uitgezocht en de Python-tool en de eerste webversie geschreven waar deze app op voortbouwt.",
     "about.credit.niimblue": "De labelontwerper waaruit deze app is gegroeid.",
+    "about.credit.mxw01": "Documenteerde het protocol van de MXW01-printer, waarop de MXW01-ondersteuning is gebaseerd. Eigen implementatie.",
     "about.credit.canvasdither": "De code voor drempel en Atkinson-dithering.",
     "about.credit.werness": "Het idee achter de Werness-dithering: de methode van Brent Werness, zoals Lucas Pope die beschreef voor Return of the Obra Dinn. Eigen implementatie.",
     "about.license": "Licentie",
