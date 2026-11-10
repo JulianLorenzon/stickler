@@ -392,8 +392,8 @@
   };
 
   /**
-   * "Auto length": leave out the blank (white) rows or columns at both ends along the paper feed, so the preview
-   * shows what gets printed. A blank image stays as it is.
+   * "Auto length": leave out the blank (white) rows or columns at the end along the paper feed, so the preview
+   * shows what gets printed. Space before the content stays, as in the designer. A blank image stays as it is.
    */
   const trimBlankEnds = (img: ImageData, along: "rows" | "cols"): ImageData => {
     const { width: w, height: h, data } = img;
@@ -406,11 +406,10 @@
       return true;
     };
     const len = along === "rows" ? h : w;
-    let first = 0;
-    while (first < len && isBlank(first)) first++;
-    if (first === len) return img;
+    const first = 0;
     let last = len - 1;
-    while (last > first && isBlank(last)) last--;
+    while (last >= 0 && isBlank(last)) last--;
+    if (last < 0) return img;
     const [x, y, cw, ch] = along === "rows" ? [0, first, w, last - first + 1] : [first, 0, last - first + 1, h];
     const c = document.createElement("canvas");
     c.width = w;

@@ -121,7 +121,8 @@
     labelProps = {
       ...labelProps,
       size: { ...labelProps.size, [axis]: want },
-      ...(paper ? { paper: { ...paper, [axis]: want } } : {}),
+      // The paper keeps its strips before (and after) the design area
+      ...(paper ? { paper: { ...paper, [axis]: want + paper[axis] - current } } : {}),
     };
     fabricCanvas.setLabelProps(labelProps);
     fabricCanvas.fitLabel();

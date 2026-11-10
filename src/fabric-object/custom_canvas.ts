@@ -1,5 +1,5 @@
 import * as fabric from "fabric";
-import { DEFAULT_LABEL_PROPS } from "$/defaults";
+import { DEFAULT_LABEL_PROPS, MXW01_TAIL, feedMargins, printerOf } from "$/defaults";
 import type { LabelProps } from "$/types";
 
 type LabelBounds = {
@@ -41,6 +41,8 @@ export class CustomCanvas extends fabric.Canvas {
   private readonly FIT_PADDING = 28;
   private readonly MIN_VISIBLE = 48;
   private readonly OUTSIDE_DIM = "rgba(22, 24, 25, 0.6)";
+  /** Auto length: room after the end of the piece */
+  private readonly FREE_ROOM_FADE = "rgba(22, 24, 25, 0.3)";
   private readonly FEED_MARK_COLOR = "#e85454";
   private readonly FEED_MARK_WIDTH = 3;
 
@@ -87,15 +89,19 @@ export class CustomCanvas extends fabric.Canvas {
 
   /**
    * The physical label in label coordinates; bigger than the design area where the printer can't reach. Across the
-   * label that's both sides of the printhead; along it, the strip at the front edge before printing starts.
+   * label that's both sides of the printhead; along it, the paper before printing starts (front edge) and, on
+   * printers that feed after a print, after it.
    */
   private paperRect(): { x: number; y: number; width: number; height: number } {
     const { width: W, height: H } = this.labelProps.size;
     const paper = this.labelProps.paper ?? this.labelProps.size;
     const alongX = this.labelProps.printDirection === "left";
+    const extra = alongX ? paper.width - W : paper.height - H;
+    const { tail } = feedMargins(this.labelProps);
+    const lead = extra >= tail ? extra - tail : extra;
     return {
-      x: alongX ? W - paper.width : (W - paper.width) / 2,
-      y: alongX ? (H - paper.height) / 2 : H - paper.height,
+      x: alongX ? -lead : (W - paper.width) / 2,
+      y: alongX ? (H - paper.height) / 2 : -lead,
       width: paper.width,
       height: paper.height,
     };
@@ -567,7 +573,49 @@ export class CustomCanvas extends fabric.Canvas {
     } else {
       ctx.fillRect(px, py - this.FEED_MARK_WIDTH, pw, this.FEED_MARK_WIDTH);
     }
+
+    if (this.labelProps.autoLength && this.editorChrome) this.drawTearLine(ctx, px, py, pw, ph);
     ctx.restore();
+  }
+
+  /**
+   * Auto length: where the piece will end (the printer's own feed after the last content), with the free room
+   * after it faded. In screen coordinates, inside the overlay's save/restore.
+   */
+  private drawTearLine(ctx: CanvasRenderingContext2D, px: number, py: number, pw: number, ph: number) {
+    const v = this.viewportTransform;
+    const alongX = this.labelProps.printDirection === "left";
+    let end = 0;
+    for (const o of this.getObjects()) {
+      const r = o.getBoundingRect();
+      end = Math.max(end, alongX ? r.left + r.width : r.top + r.height);
+    }
+    const tail = printerOf(this.labelProps) === "mxw01" ? MXW01_TAIL : 0;
+    const scale = alongX ? v[0] : v[3];
+    const origin = alongX ? v[4] : v[5];
+    const tear = Math.min(origin + (end + tail) * scale, alongX ? px + pw : py + ph);
+
+    // Fade only the design area after the tear line: it's still room to work in, unlike the grey strips
+    const { width: W, height: H } = this.labelProps.size;
+    const dx = v[4];
+    const dy = v[5];
+    ctx.fillStyle = this.FREE_ROOM_FADE;
+    if (alongX) ctx.fillRect(tear, dy, dx + W * v[0] - tear, H * v[3]);
+    else ctx.fillRect(dx, tear, W * v[0], dy + H * v[3] - tear);
+
+    ctx.strokeStyle = this.FEED_MARK_COLOR;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    if (alongX) {
+      ctx.moveTo(tear, py);
+      ctx.lineTo(tear, py + ph);
+    } else {
+      ctx.moveTo(px, tear);
+      ctx.lineTo(px + pw, tear);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   override _renderObjects(

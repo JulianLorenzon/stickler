@@ -72,24 +72,38 @@ export const ROLLS: Record<PrinterId, LabelPreset[]> = { d11s: D11S_ROLLS, mxw01
 /** Printer a label or preset is made for */
 export const printerOf = (p: { printer?: PrinterId }): PrinterId => p.printer ?? "d11s";
 
+/** MXW01: blank paper before every print (print head to tear bar) and after it (its own feed), in dots */
+export const MXW01_LEAD = 68; // 8.5 mm
+export const MXW01_TAIL = 48; // 6 mm
+
+/**
+ * Paper along the feed the printer can't print on, in dots: before the image (at the front edge) and after it.
+ * Auto length labels end wherever the content ends, so their tail is drawn as a tear line instead.
+ */
+export const feedMargins = (props: { printer?: PrinterId; autoLength?: boolean }): { lead: number; tail: number } =>
+  printerOf(props) === "mxw01"
+    ? { lead: MXW01_LEAD, tail: props.autoLength ? 0 : MXW01_TAIL }
+    : { lead: PRINT_START_MARGIN, tail: 0 };
+
 /** Length of the label along the paper feed, "width" or "height" of the design area */
 export const feedAxis = (props: LabelProps): "width" | "height" => (props.printDirection === "left" ? "width" : "height");
 
 /**
- * Earlier versions used the whole label length as the design area. Take the strip at the front edge the printer
- * can't reach out of it; objects keep their place relative to where the printer starts, so prints don't change.
+ * A label size is the physical piece. Take what the printer can't print on along the feed (feedMargins) out of the
+ * design area; objects keep their place relative to where the printer starts. Labels that already have it (paper
+ * longer than the design area along the feed) stay as they are.
  */
 export const withPrintStartMargin = (props: LabelProps): LabelProps => {
   const axis = feedAxis(props);
   const paper = props.paper ?? props.size;
-  // Continuous rolls have no front edge to keep clear of
-  if (printerOf(props) !== "d11s") return props;
-  if (props.shape === "circle" || paper[axis] !== props.size[axis] || props.size[axis] <= 2 * PRINT_START_MARGIN) {
+  const { lead, tail } = feedMargins(props);
+  const margins = lead + tail;
+  if (props.shape === "circle" || paper[axis] !== props.size[axis] || props.size[axis] - margins < 2 * DOTS_PER_MM) {
     return props;
   }
   return {
     ...props,
-    size: { ...props.size, [axis]: props.size[axis] - PRINT_START_MARGIN },
+    size: { ...props.size, [axis]: props.size[axis] - margins },
     paper: { ...paper },
   };
 };
