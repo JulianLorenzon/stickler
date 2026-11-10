@@ -7,9 +7,6 @@ import { LabelType, type EncodedImage, type PrinterInfo } from "../types";
 import type { DriverIO, PrinterDriver } from "./types";
 
 export const MXW01_PRINTHEAD_PX = 384;
-const BYTES_PER_ROW = MXW01_PRINTHEAD_PX / 8;
-/** The printer seems to need at least this many lines per job */
-const MIN_LINES = 90;
 /**
  * Heat per density step (light, medium, dark). Calibration print 2026-11-10: 0x20 barely prints, 0x80 is as dark as
  * it gets (more heat adds nothing)
@@ -117,13 +114,9 @@ class Mxw01PrintTask extends AbstractPrintTask {
   }
 
   async printPage(image: EncodedImage, quantity: number): Promise<void> {
-    let lines = image.rows;
-    let data = image.rowsData;
-    if (lines < MIN_LINES) {
-      data = new Uint8Array(MIN_LINES * BYTES_PER_ROW);
-      data.set(image.rowsData);
-      lines = MIN_LINES;
-    }
+    // No padding needed: a 24-line job printed fine (2026-11-10); the printer feeds ~14 mm after every job anyway
+    const lines = image.rows;
+    const data = image.rowsData;
 
     for (let copy = 0; copy < quantity; copy++) {
       const status = parseStatus(await request(this.io, Cmd.Status));
