@@ -3,6 +3,7 @@
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr } from "$/utils/i18n";
   import type { WorkerReply, ZxingResult } from "$/utils/scan_worker";
+  import { readCodeFromImage } from "$/utils/code_scanner";
 
   type Props = {
     /** Called once: the code read, undefined if the user closed the scanner, or the error if the camera failed */
@@ -24,6 +25,9 @@
   let torchOn = $state(false);
   let zoomRange = $state<{ min: number; max: number; step: number } | undefined>();
   let zoom = $state(1);
+  /** Reading a picture picked with "From image", and what came of it */
+  let readingImage = $state(false);
+  let imageMessage = $state("");
 
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
@@ -148,6 +152,34 @@
     }
   };
 
+  /** Read a code from a picture instead, e.g. a screenshot of Android's Wi-Fi share QR code */
+  const pickImage = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      readingImage = true;
+      imageMessage = "";
+      try {
+        const result = await readCodeFromImage(file);
+        if (result) {
+          found = true;
+          setTimeout(() => finish(result), 250);
+          return;
+        }
+        imageMessage = $tr("editor.scan.image.none");
+      } catch (e) {
+        console.error(e);
+        imageMessage = $tr("editor.scan.image.failed");
+      } finally {
+        readingImage = false;
+      }
+    };
+    input.click();
+  };
+
   const onZoom = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     track?.applyConstraints({ advanced: [{ zoom } as any] }).catch(() => {});
@@ -182,7 +214,15 @@
   </div>
 
   <div class="bottom">
-    <div class="status">{ready ? $tr("editor.scan.hint") : $tr("editor.scan.starting")}</div>
+    <div class="status">
+      {#if readingImage}
+        {$tr("editor.scan.image.reading")}
+      {:else if imageMessage}
+        {imageMessage}
+      {:else}
+        {ready ? $tr("editor.scan.hint") : $tr("editor.scan.starting")}
+      {/if}
+    </div>
     {#if zoomRange}
       <div class="zoom">
         <MdIcon icon="zoom_out" />
@@ -197,6 +237,10 @@
         <MdIcon icon="zoom_in" />
       </div>
     {/if}
+    <button class="from-image" onclick={pickImage} disabled={readingImage}>
+      <MdIcon icon="image" />
+      {$tr("editor.scan.image")}
+    </button>
   </div>
 </div>
 
@@ -281,6 +325,23 @@
     align-items: center;
     gap: 14px;
     padding: 0 24px;
+  }
+
+  .from-image {
+    min-height: 48px;
+    padding: 0 20px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .from-image:disabled {
+    opacity: 0.6;
   }
 
   .status {

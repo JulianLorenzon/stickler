@@ -15,7 +15,7 @@
     werness,
     applyCurve,
   } from "$/utils/post_process";
-  import { D11S_DOT_MODEL, dotGainCurve, dotModelFor, simulatePrint } from "$/utils/print_sim";
+  import { D11S_DOT_MODEL, dotModelFor, simulatePrint } from "$/utils/print_sim";
   import * as fabric from "fabric";
   import {
     type EncodedImage,
@@ -27,7 +27,7 @@
     driverById,
   } from "$/lib/printer";
   import type { LabelProps, PostProcessType, FabricJson, PreviewProps, PreviewPropsOffset, PrinterId } from "$/types";
-  import type { PrintDirection } from "$/lib/printer/types";
+  import { dotGainCurveFor, hasLabelGaps as testHasLabelGaps, withOffset } from "$/utils/test_prints";
   import ParamLockButton from "$/components/basic/ParamLockButton.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import { canvasPreprocess } from "$/utils/canvas_preprocess";
@@ -38,7 +38,7 @@
   import { CustomCanvas } from "$/fabric-object/custom_canvas";
   import { FileUtils } from "$/utils/file_utils";
   import AppModal from "$/components/basic/AppModal.svelte";
-  import { DEFAULT_LABEL_PROPS, DOTS_PER_MM, OBJECT_DEFAULTS_TEXT, printerOf } from "$/defaults";
+  import { printerOf } from "$/defaults";
 
   interface Props {
     labelProps: LabelProps;
@@ -76,11 +76,10 @@
   const previewMode = $derived($appConfig.previewMode ?? "bitmap");
   /** The printer prints go to: the connected one, or the label's printer while there is none */
   const targetPrinter = $derived<PrinterId>($printerMeta?.driver ?? printerOf(labelProps));
-  const targetMeta = $derived($printerMeta ?? driverById(targetPrinter).meta({}));
   /** Dot gain model of that printer; without one there is no correction */
   const dotModel = $derived(dotModelFor(targetPrinter));
-  /** The offset test strip only makes sense where the print has to land on a label between gaps */
-  const hasLabelGaps = $derived(targetMeta.paperTypes.includes(LabelType.WithGaps));
+  /** The offset matters where the print has to land on a label between gaps */
+  const hasLabelGaps = $derived(testHasLabelGaps($printerMeta ?? driverById(targetPrinter).meta({})));
   let originalImage: ImageData;
   /** For "smart" mode: the visible parts of photos on a transparent background */
   let photoLayer: ImageData | undefined;
@@ -95,10 +94,6 @@
   let pagesTotal = $state<number>(1);
   let offset = $state<PreviewPropsOffset>({ x: 0, y: 0, offsetType: "inner" });
   let offsetWarning = $state<string>("");
-  /** Offset test strip: step between labels in dots, and the offsets of the last printed strip */
-  const CALIBRATION_LABELS = 3;
-  let calibrationStep = $state<number>(DOTS_PER_MM);
-  let calibrationPrinted = $state<number[]>([]);
   let currentPrintTask: AbstractPrintTask | undefined;
 
   let savedProps = $state<PreviewProps>({});
@@ -142,11 +137,7 @@
   };
 
   /** Send one image to the printer and wait until it's out. Returns false if sending failed */
-  const printImage = async (
-    canvas: HTMLCanvasElement,
-    copies: number,
-    direction: PrintDirection = labelProps.printDirection,
-  ): Promise<boolean> => {
+  const printImage = async (canvas: HTMLCanvasElement, copies: number): Promise<boolean> => {
     $printerClient.stopHeartbeat();
 
     currentPrintTask = $printerClient.abstraction.newPrintTask(printTaskName, {
@@ -159,7 +150,7 @@
     });
 
     try {
-      const encoded: EncodedImage = $printerClient.encodeCanvas(canvas, direction);
+      const encoded: EncodedImage = $printerClient.encodeCanvas(canvas, labelProps.printDirection);
       await currentPrintTask.printInit();
       await currentPrintTask.printPage(encoded, copies);
     } catch (e) {
@@ -213,7 +204,7 @@
 
       await generatePreviewData(page);
 
-      if (!(await printImage(makePrintCanvas(processedCanvas, offset), quantity))) {
+      if (!(await printImage(withOffset(processedCanvas, offset), quantity))) {
         return;
       }
 
@@ -228,216 +219,9 @@
     }
   };
 
-  /**
-   * Size and direction of a test label for the printer it goes to: the open label when it's for that printer,
-   * otherwise the default label (D11s) or a piece as wide as the print head (continuous rolls)
-   */
-  const testLabel = $derived.by<{ width: number; height: number; direction: PrintDirection }>(() => {
-    if (printerOf(labelProps) === targetPrinter) return { ...labelProps.size, direction: labelProps.printDirection };
-    if (targetMeta.printDirection === "left") return { ...DEFAULT_LABEL_PROPS.size, direction: "left" };
-    return { width: targetMeta.printheadPixels, height: GREY_ROW, direction: "top" };
-  });
-
-  /** X offsets (dots) for the next test strip, centered on the current offset */
-  const calibrationPlan = $derived(
-    Array.from({ length: CALIBRATION_LABELS }, (_, i) => offset.x + (i - (CALIBRATION_LABELS - 1) / 2) * calibrationStep),
-  );
-
-  const formatMm = (dots: number): string => {
-    const mm = dots / DOTS_PER_MM;
-    return `${mm > 0 ? "+" : mm < 0 ? "−" : ""}${Number(Math.abs(mm).toFixed(3))}`;
-  };
-
-  /**
-   * A test label for dialing in the offset: a frame on the edges of the design area, a tick every millimetre
-   * from both ends and in the middle, and the offset it was printed with.
-   */
-  const drawCalibrationLabel = (xOffset: number, index: number): HTMLCanvasElement => {
-    const { width: W, height: H } = testLabel;
-    const canvas = document.createElement("canvas");
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext("2d")!;
-    const line = 2;
-    const mm = DOTS_PER_MM;
-
-    ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = "black";
-
-    // Frame
-    ctx.fillRect(0, 0, W, line);
-    ctx.fillRect(0, H - line, W, line);
-    ctx.fillRect(0, 0, line, H);
-    ctx.fillRect(W - line, 0, line, H);
-
-    // Millimetre ticks from both ends, longer every 5 mm
-    const ticks = Math.min(10, Math.floor(W / mm / 3));
-    for (let i = 1; i <= ticks; i++) {
-      const len = i % 5 === 0 ? Math.round(H * 0.3) : Math.round(H * 0.15);
-      for (const x of [i * mm, W - i * mm]) {
-        ctx.fillRect(x - 1, 0, line, len);
-        ctx.fillRect(x - 1, H - len, line, len);
-      }
-    }
-
-    // Middle
-    const mid = Math.round(H * 0.15);
-    ctx.fillRect(W / 2 - 1, 0, line, mid);
-    ctx.fillRect(W / 2 - 1, H - mid, line, mid);
-
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = `bold ${Math.round(H * 0.3)}px ${OBJECT_DEFAULTS_TEXT.fontFamily}`;
-    ctx.fillText(`${formatMm(xOffset)} mm`, W / 2, H * 0.44);
-    ctx.font = `${Math.round(H * 0.13)}px ${OBJECT_DEFAULTS_TEXT.fontFamily}`;
-    ctx.fillText(`X ${xOffset} · ${index + 1}/${CALIBRATION_LABELS}`, W / 2, H * 0.72);
-
-    const iData = threshold(ctx.getImageData(0, 0, W, H), 128);
-    ctx.putImageData(iData, 0, 0);
-    return canvas;
-  };
-
-  const printCalibration = async () => {
-    const values = [...calibrationPlan];
-    calibrationPrinted = values;
-    printState = "sending";
-    error = "";
-
-    for (let i = 0; i < values.length; i++) {
-      const label = drawCalibrationLabel(values[i], i);
-      if (!(await printImage(makePrintCanvas(label, { ...offset, x: values[i] }), 1, testLabel.direction))) {
-        return;
-      }
-      await pageDelay(i, values.length);
-    }
-
-    printState = "idle";
-    $printerClient.startHeartbeat();
-  };
-
-  const useCalibrationOffset = (x: number) => {
-    offset.x = x;
-    // An offset picked from a test strip is a calibration, so keep it for next time without asking for the lock
-    if (savedProps.offset === undefined) {
-      toggleSavedProp("offset", offset);
-    } else {
-      updateSavedProp("offset", offset);
-    }
-    updatePreview();
-  };
-
-  /** Height of one row of the grey test on a continuous roll */
-  const GREY_ROW = 14 * DOTS_PER_MM;
-
-  /**
-   * Grey test: one label per dithering mode. Atkinson uses the threshold slider, like its dot correction does; Auto
-   * dithers photos with Atkinson at 128
-   */
-  const GREY_TEST_MODES: { name: string; mode: PostProcessType; dither: (iData: ImageData) => ImageData }[] = [
-    { name: "Atkinson", mode: "dither", dither: (iData) => atkinson(iData, thresholdValue) },
-    { name: "Floyd–Steinberg", mode: "floyd", dither: (iData) => floydSteinberg(iData, 128) },
-    { name: "Blue noise", mode: "bluenoise", dither: blueNoiseDither },
-    { name: "Werness", mode: "werness", dither: werness },
-  ];
-  const GREY_TEST_LEVELS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
-
-  /**
-   * A row of grey patches from 10 to 100% ink, dithered without any tone change, with the mode name above and the
-   * percentages below. Photographed next to the screen it shows how much darker each grey prints (dot gain).
-   * Uses the dot gain correction when it's on, and says so on the label.
-   */
-  const drawGreyLabel = (mode: (typeof GREY_TEST_MODES)[number], W: number, H: number): HTMLCanvasElement => {
-    const canvas = document.createElement("canvas");
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
-
-    ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, W, H);
-
-    const margin = Math.round(DOTS_PER_MM / 2);
-    const gap = 2;
-    const top = Math.round(H * 0.24);
-    const bottom = Math.round(H * 0.8);
-    const n = GREY_TEST_LEVELS.length;
-    const pw = Math.floor((W - 2 * margin - (n - 1) * gap) / n);
-    const x0 = Math.round((W - n * pw - (n - 1) * gap) / 2);
-
-    GREY_TEST_LEVELS.forEach((level, i) => {
-      const v = Math.round(255 * (1 - level / 100));
-      ctx.fillStyle = `rgb(${v},${v},${v})`;
-      ctx.fillRect(x0 + i * (pw + gap), top, pw, bottom - top);
-    });
-    const curve = curveFor(mode.mode);
-    const patches = ctx.getImageData(0, top, W, bottom - top);
-    ctx.putImageData(mode.dither(curve ? applyCurve(patches, curve) : patches), 0, top);
-
-    ctx.fillStyle = "black";
-    ctx.textBaseline = "middle";
-    ctx.font = `bold ${Math.round(H * 0.16)}px ${OBJECT_DEFAULTS_TEXT.fontFamily}`;
-    ctx.fillText(curve ? `${mode.name} · corrected` : mode.name, x0, top / 2);
-    ctx.textAlign = "center";
-    ctx.font = `${Math.round(H * 0.13)}px ${OBJECT_DEFAULTS_TEXT.fontFamily}`;
-    GREY_TEST_LEVELS.forEach((level, i) => ctx.fillText(`${level}`, x0 + i * (pw + gap) + pw / 2, (bottom + H) / 2));
-
-    // Only the text rows still have grey edges
-    ctx.putImageData(threshold(ctx.getImageData(0, 0, W, top), 128), 0, 0);
-    ctx.putImageData(threshold(ctx.getImageData(0, bottom, W, H - bottom), 128), 0, bottom);
-    return canvas;
-  };
-
-  /**
-   * Labels with gaps get one label per mode. A continuous roll gets a single piece with a row per mode, so there is
-   * no blank feed between them and they come out in one go, without the offset (that's for labels).
-   */
-  const printGreyTest = async () => {
-    printState = "sending";
-    error = "";
-    const { width: W, height: H, direction } = testLabel;
-
-    if (hasLabelGaps) {
-      for (let i = 0; i < GREY_TEST_MODES.length; i++) {
-        if (!(await printImage(makePrintCanvas(drawGreyLabel(GREY_TEST_MODES[i], W, H), offset), 1, direction))) {
-          return;
-        }
-        await pageDelay(i, GREY_TEST_MODES.length);
-      }
-    } else {
-      const strip = document.createElement("canvas");
-      strip.width = W;
-      strip.height = GREY_ROW * GREY_TEST_MODES.length;
-      const ctx = strip.getContext("2d")!;
-      GREY_TEST_MODES.forEach((mode, i) => ctx.drawImage(drawGreyLabel(mode, W, GREY_ROW), 0, i * GREY_ROW));
-      if (!(await printImage(strip, 1, direction))) return;
-    }
-
-    printState = "idle";
-    $printerClient.startHeartbeat();
-  };
-
-  /** The dot gain correction for a mode, or undefined when it's off or the mode doesn't dither */
-  const curveFor = (mode: PostProcessType): Uint8ClampedArray | undefined => {
-    const m = dotModel;
-    if (!dotGain || !m) return undefined;
-    const p = targetPrinter;
-    switch (mode) {
-      case "floyd":
-        return dotGainCurve(`${p}:floyd`, (i) => floydSteinberg(i, 128), m);
-      case "bluenoise":
-        return dotGainCurve(`${p}:bluenoise`, blueNoiseDither, m);
-      case "werness":
-        return dotGainCurve(`${p}:werness`, werness, m);
-      case "smart":
-        return dotGainCurve(`${p}:atkinson:128`, (i) => atkinson(i, 128), m);
-      case "dither":
-        return dotGainCurve(`${p}:atkinson:${thresholdValue}`, (i) => atkinson(i, thresholdValue), m);
-      case "bayer":
-        return dotGainCurve(`${p}:bayer:${thresholdValue}`, (i) => bayer(i, thresholdValue), m);
-      default:
-        return undefined;
-    }
-  };
+  /** The dot gain correction for a mode, or undefined when it's off, the mode doesn't dither or the printer has no model */
+  const curveFor = (mode: PostProcessType): Uint8ClampedArray | undefined =>
+    dotGain ? dotGainCurveFor(targetPrinter, mode, thresholdValue) : undefined;
 
   /**
    * "Auto length": leave out the blank (white) rows or columns at the end along the paper feed, so the preview
@@ -520,34 +304,9 @@
     }
   };
 
-  /**
-   * The processed preview shifted by the calibration offset. "inner" keeps the label size (content that moves past
-   * an edge is cut off), "outer" grows the image by the offset instead.
-   */
-  const makePrintCanvas = (source: HTMLCanvasElement, offset: PreviewPropsOffset): HTMLCanvasElement => {
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d")!;
-    const { width, height } = source;
-
-    if (offset.offsetType === "inner") {
-      canvas.width = width;
-      canvas.height = height;
-    } else {
-      canvas.width = width + Math.abs(offset.x);
-      canvas.height = height + Math.abs(offset.y);
-    }
-
-    ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const x = offset.offsetType === "inner" ? offset.x : Math.max(offset.x, 0);
-    const y = offset.offsetType === "inner" ? offset.y : Math.max(offset.y, 0);
-    ctx.drawImage(source, x, y);
-    return canvas;
-  };
-
   /** Bitmap: exactly what goes to the printer, offset included. Paper: the simulated print, where it should land */
   const showPreview = (iData: ImageData) => {
-    const shown = previewMode === "paper" ? null : makePrintCanvas(processedCanvas, offset);
+    const shown = previewMode === "paper" ? null : withOffset(processedCanvas, offset);
     previewCanvas.width = shown?.width ?? iData.width;
     previewCanvas.height = shown?.height ?? iData.height;
     const ctx = previewCanvas.getContext("2d")!;
@@ -996,60 +755,10 @@
               X {offset.x > 0 ? "+" : ""}{(offset.x / 8).toFixed(2)} mm · Y {offset.y > 0 ? "+" : ""}{(offset.y / 8).toFixed(2)} mm
             </p>
           {/if}
+          {#if hasLabelGaps}
+            <p>{$tr("preview.offset.calibrate_hint")}</p>
+          {/if}
         </div>
-
-        {#if hasLabelGaps}
-          <div class="calibration">
-            <div class="setting">
-              <span class="setting-label">{$tr("preview.calibration")}</span>
-              <div class="btn-group segmented" role="group">
-                {#each [DOTS_PER_MM / 2, DOTS_PER_MM] as step (step)}
-                  <button
-                    class="btn {calibrationStep === step ? 'btn-primary' : 'btn-secondary'}"
-                    onclick={() => (calibrationStep = step)}>{step / DOTS_PER_MM} mm</button>
-                {/each}
-              </div>
-              <span class="lock-spacer"></span>
-            </div>
-            <p class="offset-help">
-              {$tr("preview.calibration.help")}
-              {calibrationPlan.map((v) => formatMm(v)).join(" · ")} mm
-            </p>
-            <button
-              class="btn btn-secondary w-100"
-              disabled={$disconnected || printState !== "idle"}
-              onclick={printCalibration}>
-              <MdIcon icon="print" />
-              {$tr("preview.calibration.print")}
-            </button>
-
-            {#if calibrationPrinted.length > 0}
-              <p class="offset-help mt-2 mb-1">{$tr("preview.calibration.pick")}</p>
-              <div class="calibration-values">
-                {#each calibrationPrinted as v (v)}
-                  <button
-                    class="btn btn-sm {offset.x === v ? 'btn-primary' : 'btn-secondary'}"
-                    onclick={() => useCalibrationOffset(v)}>{formatMm(v)} mm</button>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        {/if}
-      </section>
-
-      <section class="group">
-        <h3 class="group-title">{$tr("preview.group.grey")}</h3>
-        <p class="offset-help m-0">{$tr(hasLabelGaps ? "preview.grey.help" : "preview.grey.help.strip")}</p>
-        {#if !dotModel}
-          <p class="offset-help mt-1 mb-0">{$tr("preview.grey.no_model")}</p>
-        {/if}
-        <button
-          class="btn btn-secondary w-100"
-          disabled={$disconnected || printState !== "idle"}
-          onclick={printGreyTest}>
-          <MdIcon icon="gradient" />
-          {$tr("preview.grey.print")}
-        </button>
       </section>
 
       <section class="group">
@@ -1195,22 +904,6 @@
 
   .offset-help p {
     margin: 0 0 0.375rem;
-  }
-
-  .calibration {
-    margin-top: 0.25rem;
-  }
-
-  .calibration-values {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.25rem;
-  }
-
-  .calibration-values .btn {
-    padding-left: 0;
-    padding-right: 0;
-    font-variant-numeric: tabular-nums;
   }
 
   .offset-now {

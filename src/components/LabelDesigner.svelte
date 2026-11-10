@@ -45,7 +45,8 @@
   import { CustomCanvas } from "$/fabric-object/custom_canvas";
   import VectorParamsControls from "$/components/designer-controls/VectorParamsControls.svelte";
   import { CanvasUtils } from "$/utils/canvas_utils";
-  import { codeScannerAvailable, scanCode, type ScanResult } from "$/utils/code_scanner";
+  import { codeScannerAvailable, scanCode, scanImage, type ScanResult } from "$/utils/code_scanner";
+  import { onSharedImage } from "$/utils/shared_image";
   import { animateRowResize, panelDrag, scrollEdges } from "$/utils/tool_panel";
 
   let htmlCanvas: HTMLCanvasElement;
@@ -75,6 +76,7 @@
   let previewAfterConnect = false;
   let unsubscribeConnection: (() => void) | undefined;
   let detachPinchZoom: (() => void) | undefined;
+  let stopSharedImages: (() => void) | undefined;
   let undoState = $state<UndoState>({ undoDisabled: false, redoDisabled: false });
 
   const undo = new UndoRedo();
@@ -268,7 +270,10 @@
       return;
     }
     if (result === undefined) return;
+    addScanResult(result);
+  };
 
+  const addScanResult = (result: ScanResult) => {
     const { obj, converted } = LabelDesignerObjectHelper.addScannedCode(fabricCanvas!, result);
     if (converted) {
       Toasts.message($tr("editor.scan.converted"));
@@ -276,6 +281,30 @@
     fabricCanvas!.setActiveObject(obj);
     fabricCanvas!.requestRenderAll();
     pushUndo();
+  };
+
+  /**
+   * A picture shared to the app: a code in it is added as a code (Wi-Fi share QR codes, a screenshot of a ticket),
+   * any other picture as an image
+   */
+  const onSharedPicture = async (file: File) => {
+    const result = await scanImage(file).catch((e) => {
+      console.error(e);
+      return undefined;
+    });
+    if (result) {
+      addScanResult(result);
+      Toasts.message($tr("editor.shared.code"));
+      return;
+    }
+    try {
+      const obj = await LabelDesignerObjectHelper.addImageFile(fabricCanvas!, file);
+      fabricCanvas!.setActiveObject(obj);
+      fabricCanvas!.requestRenderAll();
+      pushUndo();
+    } catch (e) {
+      Toasts.error(e);
+    }
   };
 
   const onIconPicked = (i: MaterialIcon) => {
@@ -486,6 +515,9 @@
 
     pushUndo();
 
+    // After the label has loaded, so a picture that launched the app lands on it
+    stopSharedImages = onSharedImage(onSharedPicture);
+
     // force close dropdowns on touch devices
     fabricCanvas.on("mouse:down", (): void => {
       const dropdowns = document.querySelectorAll("[data-bs-toggle='dropdown']");
@@ -599,6 +631,7 @@
     window.removeEventListener("app:back", onAppBack);
     unsubscribeConnection?.();
     detachPinchZoom?.();
+    stopSharedImages?.();
     fabricCanvas!.dispose();
   });
 

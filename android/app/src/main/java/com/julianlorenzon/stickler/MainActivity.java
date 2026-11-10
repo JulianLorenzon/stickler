@@ -13,6 +13,8 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // App plugins have to be registered before the bridge starts
+        registerPlugin(SharedImagePlugin.class);
         super.onCreate(savedInstanceState);
 
         // Android 15 forces edge-to-edge, which turns off adjustResize. Capacitor's own inset handler only keeps
