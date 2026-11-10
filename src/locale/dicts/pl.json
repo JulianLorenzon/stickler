@@ -280,6 +280,8 @@
     "preview.group.grey": "Test szarości",
     "preview.group.printer": "Drukarka",
     "preview.grey.help": "Drukuje 4 etykiety z polami szarości od 10 do 100%, po jednej na każdy tryb rastrowania (tryb automatyczny używa dla zdjęć Atkinsona przy 128; etykieta Atkinsona używa progu powyżej). Punkty termiczne się rozlewają, więc szarości drukują się ciemniej niż na ekranie; zdjęcie wydruku obok podglądu pokaże, o ile.",
+    "preview.grey.help.strip": "Drukuje jeden kawałek z rzędem pól szarości od 10 do 100% dla każdego trybu rastrowania (tryb automatyczny używa dla zdjęć Atkinsona przy 128; rząd Atkinsona używa progu powyżej). Punkty termiczne się rozlewają, więc szarości drukują się ciemniej niż na ekranie; zdjęcie wydruku obok podglądu pokaże, o ile.",
+    "preview.grey.no_model": "Ta drukarka nie ma jeszcze korekcji punktów, więc test drukuje się bez niej. Korekcję można wyznaczyć ze zdjęcia wydruku przy równym świetle dziennym.",
     "preview.grey.print": "Drukuj test szarości",
     "about.title": "O aplikacji i licencje",
     "about.credits": "Podziękowania",

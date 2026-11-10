@@ -280,6 +280,8 @@
     "preview.group.grey": "Prueba de grises",
     "preview.group.printer": "Impresora",
     "preview.grey.help": "Imprime 4 etiquetas con parches de gris del 10 al 100 %, una por modo de tramado (Automático usa Atkinson a 128 para las fotos; la de Atkinson usa el umbral de arriba). Los puntos térmicos se expanden, así que los grises salen más oscuros que en pantalla; una foto de ellas junto a la vista previa muestra cuánto.",
+    "preview.grey.help.strip": "Imprime una pieza con una fila de parches de gris del 10 al 100 % por cada modo de tramado (Automático usa Atkinson a 128 para las fotos; la fila de Atkinson usa el umbral de arriba). Los puntos térmicos se expanden, así que los grises salen más oscuros que en pantalla; una foto junto a la vista previa muestra cuánto.",
+    "preview.grey.no_model": "Esta impresora aún no tiene corrección de puntos, así que la prueba se imprime sin ella. Una foto de la impresión con luz de día uniforme sirve para calcularla.",
     "preview.grey.print": "Imprimir prueba de grises",
     "about.title": "Acerca de y licencias",
     "about.credits": "Créditos",

@@ -280,6 +280,8 @@
     "preview.group.grey": "Grijstest",
     "preview.group.printer": "Printer",
     "preview.grey.help": "Drukt 4 labels af met grijsvlakken van 10 tot 100%, één per ditheringmodus (Automatisch gebruikt Atkinson op 128 voor foto's; het Atkinson-label gebruikt de drempel hierboven). Thermische punten vloeien uit, dus grijs komt donkerder op papier dan op het scherm; een foto ervan naast het voorbeeld laat zien hoeveel.",
+    "preview.grey.help.strip": "Drukt één stuk af met per ditheringmodus een rij grijsvlakken van 10 tot 100% (Automatisch gebruikt Atkinson op 128 voor foto's; de Atkinson-rij gebruikt de drempel hierboven). Thermische punten vloeien uit, dus grijs komt donkerder op papier dan op het scherm; een foto ervan naast het voorbeeld laat zien hoeveel.",
+    "preview.grey.no_model": "Voor deze printer is er nog geen puntcorrectie, dus de test wordt zonder afgedrukt. Uit een foto van de afdruk bij gelijkmatig daglicht kan er een bepaald worden.",
     "preview.grey.print": "Grijstest afdrukken",
     "about.title": "Over en licenties",
     "about.credits": "Met dank aan",

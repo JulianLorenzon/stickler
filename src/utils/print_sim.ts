@@ -1,3 +1,5 @@
+import type { PrinterId } from "$/types";
+
 /**
  * A rough model of how the D11s burns its dots, for the "on paper" preview and the dot gain correction.
  *
@@ -26,6 +28,14 @@ export const D11S_DOT_MODEL: DotModel = {
   spillOrth: 0.114,
   spillDiag: 0,
 };
+
+/**
+ * Dot models of the printers that have one. A printer without one gets no dot gain correction: another printer's model
+ * would correct for the wrong dots. Fit a new one from that printer's grey test.
+ */
+const DOT_MODELS: Partial<Record<PrinterId, DotModel>> = { d11s: D11S_DOT_MODEL };
+
+export const dotModelFor = (printer: PrinterId): DotModel | undefined => DOT_MODELS[printer];
 
 /** Paper and ink colours of the Fichero labels, for drawing the simulation */
 const PAPER = [244, 240, 234];

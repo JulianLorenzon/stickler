@@ -15,7 +15,7 @@
     werness,
     applyCurve,
   } from "$/utils/post_process";
-  import { dotGainCurve, simulatePrint } from "$/utils/print_sim";
+  import { D11S_DOT_MODEL, dotGainCurve, dotModelFor, simulatePrint } from "$/utils/print_sim";
   import * as fabric from "fabric";
   import {
     type EncodedImage,
@@ -26,7 +26,8 @@
     Utils,
     driverById,
   } from "$/lib/printer";
-  import type { LabelProps, PostProcessType, FabricJson, PreviewProps, PreviewPropsOffset } from "$/types";
+  import type { LabelProps, PostProcessType, FabricJson, PreviewProps, PreviewPropsOffset, PrinterId } from "$/types";
+  import type { PrintDirection } from "$/lib/printer/types";
   import ParamLockButton from "$/components/basic/ParamLockButton.svelte";
   import { tr, type TranslationKey } from "$/utils/i18n";
   import { canvasPreprocess } from "$/utils/canvas_preprocess";
@@ -37,7 +38,7 @@
   import { CustomCanvas } from "$/fabric-object/custom_canvas";
   import { FileUtils } from "$/utils/file_utils";
   import AppModal from "$/components/basic/AppModal.svelte";
-  import { DOTS_PER_MM, OBJECT_DEFAULTS_TEXT, printerOf } from "$/defaults";
+  import { DEFAULT_LABEL_PROPS, DOTS_PER_MM, OBJECT_DEFAULTS_TEXT, printerOf } from "$/defaults";
 
   interface Props {
     labelProps: LabelProps;
@@ -73,6 +74,13 @@
   let dotGain = $state<boolean>(true);
   const dithers = $derived(postProcessType !== "threshold");
   const previewMode = $derived($appConfig.previewMode ?? "bitmap");
+  /** The printer prints go to: the connected one, or the label's printer while there is none */
+  const targetPrinter = $derived<PrinterId>($printerMeta?.driver ?? printerOf(labelProps));
+  const targetMeta = $derived($printerMeta ?? driverById(targetPrinter).meta({}));
+  /** Dot gain model of that printer; without one there is no correction */
+  const dotModel = $derived(dotModelFor(targetPrinter));
+  /** The offset test strip only makes sense where the print has to land on a label between gaps */
+  const hasLabelGaps = $derived(targetMeta.paperTypes.includes(LabelType.WithGaps));
   let originalImage: ImageData;
   /** For "smart" mode: the visible parts of photos on a transparent background */
   let photoLayer: ImageData | undefined;
@@ -134,7 +142,11 @@
   };
 
   /** Send one image to the printer and wait until it's out. Returns false if sending failed */
-  const printImage = async (canvas: HTMLCanvasElement, copies: number): Promise<boolean> => {
+  const printImage = async (
+    canvas: HTMLCanvasElement,
+    copies: number,
+    direction: PrintDirection = labelProps.printDirection,
+  ): Promise<boolean> => {
     $printerClient.stopHeartbeat();
 
     currentPrintTask = $printerClient.abstraction.newPrintTask(printTaskName, {
@@ -147,7 +159,7 @@
     });
 
     try {
-      const encoded: EncodedImage = $printerClient.encodeCanvas(canvas, labelProps.printDirection);
+      const encoded: EncodedImage = $printerClient.encodeCanvas(canvas, direction);
       await currentPrintTask.printInit();
       await currentPrintTask.printPage(encoded, copies);
     } catch (e) {
@@ -216,6 +228,16 @@
     }
   };
 
+  /**
+   * Size and direction of a test label for the printer it goes to: the open label when it's for that printer,
+   * otherwise the default label (D11s) or a piece as wide as the print head (continuous rolls)
+   */
+  const testLabel = $derived.by<{ width: number; height: number; direction: PrintDirection }>(() => {
+    if (printerOf(labelProps) === targetPrinter) return { ...labelProps.size, direction: labelProps.printDirection };
+    if (targetMeta.printDirection === "left") return { ...DEFAULT_LABEL_PROPS.size, direction: "left" };
+    return { width: targetMeta.printheadPixels, height: GREY_ROW, direction: "top" };
+  });
+
   /** X offsets (dots) for the next test strip, centered on the current offset */
   const calibrationPlan = $derived(
     Array.from({ length: CALIBRATION_LABELS }, (_, i) => offset.x + (i - (CALIBRATION_LABELS - 1) / 2) * calibrationStep),
@@ -231,7 +253,7 @@
    * from both ends and in the middle, and the offset it was printed with.
    */
   const drawCalibrationLabel = (xOffset: number, index: number): HTMLCanvasElement => {
-    const { width: W, height: H } = labelProps.size;
+    const { width: W, height: H } = testLabel;
     const canvas = document.createElement("canvas");
     canvas.width = W;
     canvas.height = H;
@@ -284,7 +306,7 @@
 
     for (let i = 0; i < values.length; i++) {
       const label = drawCalibrationLabel(values[i], i);
-      if (!(await printImage(makePrintCanvas(label, { ...offset, x: values[i] }), 1))) {
+      if (!(await printImage(makePrintCanvas(label, { ...offset, x: values[i] }), 1, testLabel.direction))) {
         return;
       }
       await pageDelay(i, values.length);
@@ -305,6 +327,9 @@
     updatePreview();
   };
 
+  /** Height of one row of the grey test on a continuous roll */
+  const GREY_ROW = 14 * DOTS_PER_MM;
+
   /**
    * Grey test: one label per dithering mode. Atkinson uses the threshold slider, like its dot correction does; Auto
    * dithers photos with Atkinson at 128
@@ -322,8 +347,7 @@
    * percentages below. Photographed next to the screen it shows how much darker each grey prints (dot gain).
    * Uses the dot gain correction when it's on, and says so on the label.
    */
-  const drawGreyLabel = (mode: (typeof GREY_TEST_MODES)[number]): HTMLCanvasElement => {
-    const { width: W, height: H } = labelProps.size;
+  const drawGreyLabel = (mode: (typeof GREY_TEST_MODES)[number], W: number, H: number): HTMLCanvasElement => {
     const canvas = document.createElement("canvas");
     canvas.width = W;
     canvas.height = H;
@@ -363,15 +387,29 @@
     return canvas;
   };
 
+  /**
+   * Labels with gaps get one label per mode. A continuous roll gets a single piece with a row per mode, so there is
+   * no blank feed between them and they come out in one go, without the offset (that's for labels).
+   */
   const printGreyTest = async () => {
     printState = "sending";
     error = "";
+    const { width: W, height: H, direction } = testLabel;
 
-    for (let i = 0; i < GREY_TEST_MODES.length; i++) {
-      if (!(await printImage(makePrintCanvas(drawGreyLabel(GREY_TEST_MODES[i]), offset), 1))) {
-        return;
+    if (hasLabelGaps) {
+      for (let i = 0; i < GREY_TEST_MODES.length; i++) {
+        if (!(await printImage(makePrintCanvas(drawGreyLabel(GREY_TEST_MODES[i], W, H), offset), 1, direction))) {
+          return;
+        }
+        await pageDelay(i, GREY_TEST_MODES.length);
       }
-      await pageDelay(i, GREY_TEST_MODES.length);
+    } else {
+      const strip = document.createElement("canvas");
+      strip.width = W;
+      strip.height = GREY_ROW * GREY_TEST_MODES.length;
+      const ctx = strip.getContext("2d")!;
+      GREY_TEST_MODES.forEach((mode, i) => ctx.drawImage(drawGreyLabel(mode, W, GREY_ROW), 0, i * GREY_ROW));
+      if (!(await printImage(strip, 1, direction))) return;
     }
 
     printState = "idle";
@@ -380,20 +418,22 @@
 
   /** The dot gain correction for a mode, or undefined when it's off or the mode doesn't dither */
   const curveFor = (mode: PostProcessType): Uint8ClampedArray | undefined => {
-    if (!dotGain) return undefined;
+    const m = dotModel;
+    if (!dotGain || !m) return undefined;
+    const p = targetPrinter;
     switch (mode) {
       case "floyd":
-        return dotGainCurve("floyd", (i) => floydSteinberg(i, 128));
+        return dotGainCurve(`${p}:floyd`, (i) => floydSteinberg(i, 128), m);
       case "bluenoise":
-        return dotGainCurve("bluenoise", blueNoiseDither);
+        return dotGainCurve(`${p}:bluenoise`, blueNoiseDither, m);
       case "werness":
-        return dotGainCurve("werness", werness);
+        return dotGainCurve(`${p}:werness`, werness, m);
       case "smart":
-        return dotGainCurve("atkinson:128", (i) => atkinson(i, 128));
+        return dotGainCurve(`${p}:atkinson:128`, (i) => atkinson(i, 128), m);
       case "dither":
-        return dotGainCurve(`atkinson:${thresholdValue}`, (i) => atkinson(i, thresholdValue));
+        return dotGainCurve(`${p}:atkinson:${thresholdValue}`, (i) => atkinson(i, thresholdValue), m);
       case "bayer":
-        return dotGainCurve(`bayer:${thresholdValue}`, (i) => bayer(i, thresholdValue));
+        return dotGainCurve(`${p}:bayer:${thresholdValue}`, (i) => bayer(i, thresholdValue), m);
       default:
         return undefined;
     }
@@ -512,7 +552,8 @@
     previewCanvas.height = shown?.height ?? iData.height;
     const ctx = previewCanvas.getContext("2d")!;
     if (shown) ctx.drawImage(shown, 0, 0);
-    else ctx.putImageData(simulatePrint(iData), 0, 0);
+    // No model yet for this printer: the D11s one is the best guess for the simulation
+    else ctx.putImageData(simulatePrint(iData, dotModel ?? D11S_DOT_MODEL), 0, 0);
   };
 
   const setPreviewMode = (mode: "bitmap" | "paper") => {
@@ -888,7 +929,7 @@
       <div class="setting-hint">{$tr("preview.threshold.smart_hint")}</div>
     {/if}
 
-    {#if dithers}
+    {#if dithers && dotModel}
       <div class="setting">
         <span class="setting-label">{$tr("preview.dotgain")}</span>
         <div class="form-check form-switch flex-grow-1 m-0">
@@ -957,46 +998,51 @@
           {/if}
         </div>
 
-        <div class="calibration">
-          <div class="setting">
-            <span class="setting-label">{$tr("preview.calibration")}</span>
-            <div class="btn-group segmented" role="group">
-              {#each [DOTS_PER_MM / 2, DOTS_PER_MM] as step (step)}
-                <button
-                  class="btn {calibrationStep === step ? 'btn-primary' : 'btn-secondary'}"
-                  onclick={() => (calibrationStep = step)}>{step / DOTS_PER_MM} mm</button>
-              {/each}
+        {#if hasLabelGaps}
+          <div class="calibration">
+            <div class="setting">
+              <span class="setting-label">{$tr("preview.calibration")}</span>
+              <div class="btn-group segmented" role="group">
+                {#each [DOTS_PER_MM / 2, DOTS_PER_MM] as step (step)}
+                  <button
+                    class="btn {calibrationStep === step ? 'btn-primary' : 'btn-secondary'}"
+                    onclick={() => (calibrationStep = step)}>{step / DOTS_PER_MM} mm</button>
+                {/each}
+              </div>
+              <span class="lock-spacer"></span>
             </div>
-            <span class="lock-spacer"></span>
-          </div>
-          <p class="offset-help">
-            {$tr("preview.calibration.help")}
-            {calibrationPlan.map((v) => formatMm(v)).join(" · ")} mm
-          </p>
-          <button
-            class="btn btn-secondary w-100"
-            disabled={$disconnected || printState !== "idle"}
-            onclick={printCalibration}>
-            <MdIcon icon="print" />
-            {$tr("preview.calibration.print")}
-          </button>
+            <p class="offset-help">
+              {$tr("preview.calibration.help")}
+              {calibrationPlan.map((v) => formatMm(v)).join(" · ")} mm
+            </p>
+            <button
+              class="btn btn-secondary w-100"
+              disabled={$disconnected || printState !== "idle"}
+              onclick={printCalibration}>
+              <MdIcon icon="print" />
+              {$tr("preview.calibration.print")}
+            </button>
 
-          {#if calibrationPrinted.length > 0}
-            <p class="offset-help mt-2 mb-1">{$tr("preview.calibration.pick")}</p>
-            <div class="calibration-values">
-              {#each calibrationPrinted as v (v)}
-                <button
-                  class="btn btn-sm {offset.x === v ? 'btn-primary' : 'btn-secondary'}"
-                  onclick={() => useCalibrationOffset(v)}>{formatMm(v)} mm</button>
-              {/each}
-            </div>
-          {/if}
-        </div>
+            {#if calibrationPrinted.length > 0}
+              <p class="offset-help mt-2 mb-1">{$tr("preview.calibration.pick")}</p>
+              <div class="calibration-values">
+                {#each calibrationPrinted as v (v)}
+                  <button
+                    class="btn btn-sm {offset.x === v ? 'btn-primary' : 'btn-secondary'}"
+                    onclick={() => useCalibrationOffset(v)}>{formatMm(v)} mm</button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
       </section>
 
       <section class="group">
         <h3 class="group-title">{$tr("preview.group.grey")}</h3>
-        <p class="offset-help m-0">{$tr("preview.grey.help")}</p>
+        <p class="offset-help m-0">{$tr(hasLabelGaps ? "preview.grey.help" : "preview.grey.help.strip")}</p>
+        {#if !dotModel}
+          <p class="offset-help mt-1 mb-0">{$tr("preview.grey.no_model")}</p>
+        {/if}
         <button
           class="btn btn-secondary w-100"
           disabled={$disconnected || printState !== "idle"}

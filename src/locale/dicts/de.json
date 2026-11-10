@@ -280,6 +280,8 @@
     "preview.group.grey": "Graustufentest",
     "preview.group.printer": "Drucker",
     "preview.grey.help": "Druckt 4 Etiketten mit Grauflächen von 10 bis 100 %, eins pro Dithering-Modus (Automatisch nutzt für Fotos Atkinson bei 128; das Atkinson-Etikett nutzt den Schwellenwert oben). Thermopunkte laufen aus, deshalb druckt Grau dunkler als auf dem Bildschirm; ein Foto davon neben der Vorschau zeigt, wie viel.",
+    "preview.grey.help.strip": "Druckt ein Stück mit einer Reihe Grauflächen von 10 bis 100 % pro Dithering-Modus (Automatisch nutzt für Fotos Atkinson bei 128; die Atkinson-Reihe nutzt den Schwellenwert oben). Thermopunkte laufen aus, deshalb druckt Grau dunkler als auf dem Bildschirm; ein Foto davon neben der Vorschau zeigt, wie viel.",
+    "preview.grey.no_model": "Für diesen Drucker gibt es noch keine Punktkorrektur, deshalb druckt der Test ohne. Aus einem Foto des Drucks bei gleichmäßigem Tageslicht lässt sich eine ermitteln.",
     "preview.grey.print": "Graustufentest drucken",
     "about.title": "Info und Lizenzen",
     "about.credits": "Danksagung",

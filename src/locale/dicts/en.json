@@ -280,6 +280,8 @@
     "preview.group.grey": "Grey test",
     "preview.group.printer": "Printer",
     "preview.grey.help": "Prints 4 labels with grey patches from 10 to 100%, one for each dither mode (Auto uses Atkinson at 128 for photos; the Atkinson patch uses the threshold above). Thermal dots spread, so greys print darker than on screen; a photo of these next to the preview shows by how much.",
+    "preview.grey.help.strip": "Prints one piece with a row of grey patches from 10 to 100% for each dither mode (Auto uses Atkinson at 128 for photos; the Atkinson row uses the threshold above). Thermal dots spread, so greys print darker than on screen; a photo of it next to the preview shows by how much.",
+    "preview.grey.no_model": "This printer has no dot correction yet, so the test prints without it. A photo of the print in even daylight is what a correction gets fitted from.",
     "preview.grey.print": "Print grey test",
     "about.title": "About & licences",
     "about.credits": "Credits",
