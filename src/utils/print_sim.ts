@@ -30,10 +30,23 @@ export const D11S_DOT_MODEL: DotModel = {
 };
 
 /**
+ * MXW01 on its 57 mm roll: fitted to the continuous-roll grey test (all four dither modes, uncorrected, the saved
+ * print preview density or the middle one) photographed 2026-11-10, measured with tools/dot-gain/measure_strip.py, rms 0.038 over 36 patches. A free
+ * fit gives base 0.04 at the same error; 0.15 keeps the single dots that are visible in the lightest patches.
+ */
+export const MXW01_DOT_MODEL: DotModel = {
+  base: 0.15,
+  orth: 0.328,
+  diag: 0.117,
+  spillOrth: 0.121,
+  spillDiag: 0.007,
+};
+
+/**
  * Dot models of the printers that have one. A printer without one gets no dot gain correction: another printer's model
  * would correct for the wrong dots. Fit a new one from that printer's grey test.
  */
-const DOT_MODELS: Partial<Record<PrinterId, DotModel>> = { d11s: D11S_DOT_MODEL };
+const DOT_MODELS: Partial<Record<PrinterId, DotModel>> = { d11s: D11S_DOT_MODEL, mxw01: MXW01_DOT_MODEL };
 
 export const dotModelFor = (printer: PrinterId): DotModel | undefined => DOT_MODELS[printer];
 
