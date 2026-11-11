@@ -1,4 +1,5 @@
 import { get, readable, writable } from "svelte/store";
+import { Capacitor } from "@capacitor/core";
 import {
   AppConfigSchema,
   CsvParamsSchema,
@@ -105,13 +106,17 @@ export const initClient = () => {
       newClient.setPacketInterval(conf.packetIntervalMs);
     }
 
-    newClient.on("packetsent", (e) => {
-      console.debug(`>> ${Utils.bufToHex(e.packet.toBytes())}`);
-    });
+    // Protocol trace for the console. Not in the Play build: nothing can read its console (no logcat output, no
+    // WebView inspector), so the lines would go nowhere
+    if (!Capacitor.isNativePlatform() || Capacitor.DEBUG) {
+      newClient.on("packetsent", (e) => {
+        console.debug(`>> ${Utils.bufToHex(e.packet.toBytes())}`);
+      });
 
-    newClient.on("packetreceived", (e) => {
-      console.debug(`<< ${Utils.bufToHex(e.packet.toBytes())}`);
-    });
+      newClient.on("packetreceived", (e) => {
+        console.debug(`<< ${Utils.bufToHex(e.packet.toBytes())}`);
+      });
+    }
 
     newClient.on("connect", (e) => {
       console.debug("onConnect");
