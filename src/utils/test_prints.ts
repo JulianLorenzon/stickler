@@ -3,7 +3,7 @@
  * from the printer sheet, for whichever printer is connected.
  */
 import { DEFAULT_LABEL_PROPS, DOTS_PER_MM, OBJECT_DEFAULTS_TEXT, printerOf } from "$/defaults";
-import type { PrintDirection, PrinterModelMeta, PrintTaskName } from "$/lib/printer";
+import type { PrintDirection, PrinterModelMeta } from "$/lib/printer";
 import { LabelType, type PrinterClient } from "$/lib/printer";
 import type { LabelProps, PostProcessType, PrinterId, PreviewPropsOffset } from "$/types";
 import { applyCurve, atkinson, bayer, blueNoiseDither, floydSteinberg, threshold, werness } from "$/utils/post_process";
@@ -220,7 +220,6 @@ export interface TestPrintOptions {
   direction: PrintDirection;
   density: number;
   labelType: LabelType;
-  printTaskName: PrintTaskName;
 }
 
 /** Print one image and wait until it's out, without the print preview's progress display */
@@ -230,7 +229,7 @@ export const printTestImage = async (
   opts: TestPrintOptions,
 ): Promise<void> => {
   client.stopHeartbeat();
-  const task = client.abstraction.newPrintTask(opts.printTaskName, {
+  const task = client.abstraction.newPrintTask({
     totalPages: 1,
     density: opts.density,
     speed: 1,

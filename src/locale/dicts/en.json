@@ -223,6 +223,7 @@
     "preview.density.light": "Light",
     "preview.density.medium": "Medium",
     "preview.lock.hint": "Settings with a lock are kept for next time. Tap the open lock next to a setting to keep it; unlocked ones go back to the default when you close this.",
+    "preview.status.cancelling": "Stopping after this label…",
     "preview.status.printing": "Printing…",
     "preview.status.sending": "Sending…",
     "params.text.bundled_fonts": "Built-in fonts",

@@ -52,7 +52,6 @@
       direction: label.direction,
       density: saved.density ?? meta.densityDefault,
       labelType: saved.labelType !== undefined && meta.paperTypes.includes(saved.labelType) ? saved.labelType : meta.paperTypes[0],
-      printTaskName: saved.printTaskName ?? $printerClient.getPrintTaskType() ?? "B1",
     };
   };
 

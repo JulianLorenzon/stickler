@@ -62,6 +62,8 @@ export class D11sPrintTask extends AbstractPrintTask {
     const paperByte = paperTypeMap[this.opts.labelType] ?? 0;
 
     for (let copy = 0; copy < quantity; copy++) {
+      if (this.cancelled) return;
+
       await this.io.sendCommand(CMD.setPaperType(paperByte), true);
       await Utils.sleep(50);
 

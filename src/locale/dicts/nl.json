@@ -223,6 +223,7 @@
     "preview.density.light": "Licht",
     "preview.density.medium": "Normaal",
     "preview.lock.hint": "Instellingen met een slot blijven bewaard voor de volgende keer. Tik op het open slot naast een instelling om die te bewaren; de andere gaan terug naar de standaardwaarde als je dit sluit.",
+    "preview.status.cancelling": "Stopt na dit label…",
     "preview.status.printing": "Afdrukken…",
     "preview.status.sending": "Versturen…",
     "params.text.bundled_fonts": "Ingebouwde lettertypen",

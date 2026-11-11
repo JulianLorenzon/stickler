@@ -1,4 +1,4 @@
-import { LabelType, printTaskNames } from "$/lib/printer";
+import { LabelType } from "$/lib/printer";
 import * as fabric from "fabric";
 import { z } from "zod";
 
@@ -88,8 +88,6 @@ export const ExportedLabelTemplateSchema = z.object({
   csv: CsvParamsSchema.optional(),
 });
 
-const [firstTask, ...otherTasks] = printTaskNames;
-
 export const PreviewPropsOffsetSchema = z.object({
   x: z.number(),
   y: z.number(),
@@ -104,7 +102,6 @@ export const PreviewPropsSchema = z.object({
   density: z.number().gte(0).optional(),
   speed: z.union([z.literal(0), z.literal(1)]).optional(),
   labelType: z.enum(LabelType).optional(),
-  printTaskName: z.enum([firstTask, ...otherTasks]).optional(),
   offset: PreviewPropsOffsetSchema.optional(),
   /** Correct dithered greys for the printer's dot gain */
   dotGain: z.boolean().optional(),

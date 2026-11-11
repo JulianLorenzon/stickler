@@ -21,7 +21,6 @@ import type {
   PrinterModelMeta,
   PrintProgressEvent,
   Packet,
-  PrintTaskName,
 } from "./types";
 
 interface ClientEventMap {
@@ -77,12 +76,8 @@ export abstract class PrinterClient extends TypedEventEmitter<ClientEventMap> {
   };
 
   readonly abstraction = {
-    newPrintTask: (_name: PrintTaskName, opts: PrintTaskOptions) => {
+    newPrintTask: (opts: PrintTaskOptions) => {
       return this.requireDriver().newPrintTask(this.io, opts);
-    },
-
-    printEnd: async () => {
-      // No-op: drivers finish each copy inside the print task
     },
 
     printerReset: async () => {
@@ -244,10 +239,6 @@ export abstract class PrinterClient extends TypedEventEmitter<ClientEventMap> {
   /** Turn a black-and-white canvas into the connected printer's raster format */
   encodeCanvas(canvas: HTMLCanvasElement, direction: PrintDirection): EncodedImage {
     return ImageEncoder.encodeCanvas(canvas, direction, this.requireDriver().raster);
-  }
-
-  getPrintTaskType(): PrintTaskName {
-    return "B1";
   }
 
   setPacketInterval(ms: number): void {

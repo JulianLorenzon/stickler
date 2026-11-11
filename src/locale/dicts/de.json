@@ -223,6 +223,7 @@
     "preview.density.light": "Hell",
     "preview.density.medium": "Mittel",
     "preview.lock.hint": "Einstellungen mit Schloss bleiben für das nächste Mal erhalten. Tippe auf das offene Schloss neben einer Einstellung, um sie zu behalten; die anderen springen beim Schließen auf den Standardwert zurück.",
+    "preview.status.cancelling": "Stoppt nach diesem Etikett…",
     "preview.status.printing": "Drucke…",
     "preview.status.sending": "Sende…",
     "params.text.bundled_fonts": "Eingebaute Schriften",

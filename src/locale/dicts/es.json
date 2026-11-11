@@ -223,6 +223,7 @@
     "preview.density.light": "Clara",
     "preview.density.medium": "Media",
     "preview.lock.hint": "Los ajustes con candado se guardan para la próxima vez. Toca el candado abierto junto a un ajuste para conservarlo; los demás vuelven al valor por defecto al cerrar.",
+    "preview.status.cancelling": "Se detiene tras esta etiqueta…",
     "preview.status.printing": "Imprimiendo…",
     "preview.status.sending": "Enviando…",
     "params.text.bundled_fonts": "Fuentes incluidas",

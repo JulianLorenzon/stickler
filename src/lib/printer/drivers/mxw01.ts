@@ -119,6 +119,8 @@ class Mxw01PrintTask extends AbstractPrintTask {
     const data = image.rowsData;
 
     for (let copy = 0; copy < quantity; copy++) {
+      if (this.cancelled) return;
+
       const status = parseStatus(await request(this.io, Cmd.Status));
       if (!status.ok) throw new Error(status.error);
 

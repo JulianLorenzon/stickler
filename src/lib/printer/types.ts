@@ -58,6 +58,3 @@ export interface Packet {
   command: number;
   toBytes(): Uint8Array;
 }
-
-export const printTaskNames = ["B1", "D110M_V4"] as const;
-export type PrintTaskName = (typeof printTaskNames)[number];

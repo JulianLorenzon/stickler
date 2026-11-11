@@ -106,22 +106,22 @@ export const initClient = () => {
     }
 
     newClient.on("packetsent", (e) => {
-      console.log(`>> ${Utils.bufToHex(e.packet.toBytes())}`);
+      console.debug(`>> ${Utils.bufToHex(e.packet.toBytes())}`);
     });
 
     newClient.on("packetreceived", (e) => {
-      console.log(`<< ${Utils.bufToHex(e.packet.toBytes())}`);
+      console.debug(`<< ${Utils.bufToHex(e.packet.toBytes())}`);
     });
 
     newClient.on("connect", (e) => {
-      console.log("onConnect");
+      console.debug("onConnect");
       heartbeatFails.set(0);
       connectionState.set("connected");
       connectedPrinterName.set(e.info.deviceName ?? "unknown");
     });
 
     newClient.on("printerinfofetched", (e) => {
-      console.log("printerInfoFetched");
+      console.debug("printerInfoFetched");
       printerInfo.set(e.info);
       const meta = newClient.getModelMetadata();
       printerMeta.set(meta);
@@ -129,7 +129,7 @@ export const initClient = () => {
     });
 
     newClient.on("disconnect", () => {
-      console.log("onDisconnect");
+      console.debug("onDisconnect");
       connectionState.set("disconnected");
       connectedPrinterName.set("");
       connectedDeviceId.set(undefined);

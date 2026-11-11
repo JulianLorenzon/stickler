@@ -42,10 +42,10 @@ export async function run(): Promise<string> {
   c.on("printerinfofetched", (e) => log.push(`info ${JSON.stringify(e.info)}`));
   await c.connect({ deviceId: "AA", deviceName: "D11s_1234" });
   c.stopHeartbeat();
-  log.push(`meta ${JSON.stringify(c.getModelMetadata())} task=${c.getPrintTaskType()}`);
+  log.push(`meta ${JSON.stringify(c.getModelMetadata())}`);
   const enc = ImageEncoder.encodeCanvas(fakeCanvas(96, 25), "top");
   for (const labelType of [LabelType.WithGaps, LabelType.Continuous]) {
-    const t = c.abstraction.newPrintTask("B1", { totalPages: 2, density: 1, speed: 0, labelType, statusPollIntervalMs: 100, statusTimeoutMs: 1000 });
+    const t = c.abstraction.newPrintTask({ totalPages: 2, density: 1, speed: 0, labelType, statusPollIntervalMs: 100, statusTimeoutMs: 1000 });
     c.on("printprogress", (e) => log.push(`progress ${JSON.stringify(e)}`));
     await t.printInit(); await t.printPage(enc, 2); await t.waitForFinished(); await t.printEnd();
     c.off?.("printprogress", undefined as never);
@@ -77,7 +77,7 @@ export async function runMxw01(rgba: Uint8Array): Promise<string> {
   c.stopHeartbeat();
   log.push(`meta ${JSON.stringify(c.getModelMetadata())}`);
   const enc = c.encodeCanvas(canvas, "top");
-  const t = c.abstraction.newPrintTask("B1", { totalPages: 1, density: 1, speed: 0, labelType: LabelType.Continuous, statusPollIntervalMs: 100, statusTimeoutMs: 1000 });
+  const t = c.abstraction.newPrintTask({ totalPages: 1, density: 1, speed: 0, labelType: LabelType.Continuous, statusPollIntervalMs: 100, statusTimeoutMs: 1000 });
   await t.printInit(); await t.printPage(enc, 1); await t.waitForFinished(); await t.printEnd();
   c.disconnect();
   return log.join("\n") + "\n";

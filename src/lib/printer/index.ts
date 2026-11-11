@@ -1,9 +1,6 @@
 export { CLIENT_DEFAULTS } from "./constants";
 
-export {
-  LabelType,
-  printTaskNames,
-} from "./types";
+export { LabelType } from "./types";
 
 export type {
   PrintDirection,
@@ -14,7 +11,6 @@ export type {
   ConnectionInfo,
   EncodedImage,
   PrintProgressEvent,
-  PrintTaskName,
   Packet,
 } from "./types";
 

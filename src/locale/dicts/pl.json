@@ -223,6 +223,7 @@
     "preview.density.light": "Jasno",
     "preview.density.medium": "Średnio",
     "preview.lock.hint": "Ustawienia z kłódką zostają na następny raz. Dotknij otwartej kłódki obok ustawienia, aby je zachować; pozostałe wracają do domyślnych po zamknięciu.",
+    "preview.status.cancelling": "Zatrzymanie po tej etykiecie…",
     "preview.status.printing": "Drukowanie…",
     "preview.status.sending": "Wysyłanie…",
     "params.text.bundled_fonts": "Wbudowane czcionki",

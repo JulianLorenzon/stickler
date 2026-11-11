@@ -21,7 +21,6 @@
     type EncodedImage,
     LabelType,
     type PrintProgressEvent,
-    type PrintTaskName,
     AbstractPrintTask,
     Utils,
     driverById,
@@ -85,18 +84,16 @@
   let originalImage: ImageData;
   /** For "smart" mode: the visible parts of photos on a transparent background */
   let photoLayer: ImageData | undefined;
-  let printTaskName = $state<PrintTaskName>("B1");
   let labelType = $state<LabelType>(LabelType.WithGaps);
-  // eslint-disable-next-line no-undef
-  let statusTimer: NodeJS.Timeout | undefined = undefined;
   let error = $state<string>("");
-  let detectedPrintTaskName: PrintTaskName | undefined = $printerClient?.getPrintTaskType();
   let csvParsed: DSVRowArray<string>;
   let page = $state<number>(0);
   let pagesTotal = $state<number>(1);
   let offset = $state<PreviewPropsOffset>({ x: 0, y: 0, offsetType: "inner" });
   let offsetWarning = $state<string>("");
   let currentPrintTask: AbstractPrintTask | undefined;
+  /** Cancel was tapped: printing stops after the copy that is at the printer */
+  let cancelling = $state<boolean>(false);
 
   let savedProps = $state<PreviewProps>({});
 
@@ -106,24 +103,6 @@
 
   const labelTypeTranslationKey = (labelType: string): TranslationKey =>
     `preview.label_type.${labelType}` as TranslationKey;
-
-  const endPrint = async () => {
-    clearInterval(statusTimer);
-
-    if (!$disconnected && printState !== "idle") {
-      if (currentPrintTask !== undefined) {
-        await currentPrintTask.printEnd();
-      } else {
-        console.warn("Print task undefined, falling back to PrintEnd command");
-        await $printerClient.abstraction.printEnd();
-      }
-
-      $printerClient.startHeartbeat();
-    }
-
-    printState = "idle";
-    printProgress = 0;
-  };
 
   const onPrintOnSystemPrinter = async () => {
     const sources: string[] = [];
@@ -137,11 +116,16 @@
     FileUtils.printImageUrls(sources);
   };
 
-  /** Send one image to the printer and wait until it's out. Returns false if sending failed */
+  /**
+   * Send one image to the printer and wait until all copies are out. Returns false if it failed.
+   * onPrint brings the dialog back to idle afterwards.
+   */
   const printImage = async (canvas: HTMLCanvasElement, copies: number): Promise<boolean> => {
     $printerClient.stopHeartbeat();
+    printState = "sending";
+    printProgress = 0;
 
-    currentPrintTask = $printerClient.abstraction.newPrintTask(printTaskName, {
+    const task = $printerClient.abstraction.newPrintTask({
       totalPages: copies,
       density,
       speed,
@@ -149,38 +133,32 @@
       statusPollIntervalMs: 100,
       statusTimeoutMs: 8_000,
     });
+    currentPrintTask = task;
 
-    try {
-      const encoded: EncodedImage = $printerClient.encodeCanvas(canvas, labelProps.printDirection);
-      await currentPrintTask.printInit();
-      await currentPrintTask.printPage(encoded, copies);
-    } catch (e) {
-      error = `${e}`;
-      console.error(e);
-      // Back to idle (and the heartbeat back on), or the "Sending…" bar would run on next to the error
-      await endPrint();
-      return false;
-    }
-
-    printState = "printing";
-
+    // The drivers report each copy twice: when its data is sent (half) and when the printer is done with it
     const listener = (e: PrintProgressEvent) => {
-      printProgress = Math.floor((e.page / copies) * ((e.pagePrintProgress + e.pageFeedProgress) / 2));
+      printState = "printing";
+      const copyDone = (e.pagePrintProgress + e.pageFeedProgress) / 200;
+      printProgress = Math.floor(((e.page - 1 + copyDone) / copies) * 100);
     };
-
     $printerClient.on("printprogress", listener);
 
+    let ok = true;
     try {
-      await currentPrintTask.waitForFinished();
+      const encoded: EncodedImage = $printerClient.encodeCanvas(canvas, labelProps.printDirection);
+      await task.printInit();
+      await task.printPage(encoded, copies);
+      await task.waitForFinished();
     } catch (e) {
       error = `${e}`;
       console.error(e);
+      ok = false;
+    } finally {
+      $printerClient.off("printprogress", listener);
     }
 
-    $printerClient.off("printprogress", listener);
-
-    await endPrint();
-    return true;
+    if (!$disconnected) await task.printEnd().catch(console.error);
+    return ok;
   };
 
   const pageDelay = async (index: number, total: number) => {
@@ -196,29 +174,41 @@
     onPrint();
   };
 
+  /**
+   * Stop printing: the copy at the printer is finished (it can't be stopped halfway), further copies and pages
+   * are left out
+   */
+  const onCancel = () => {
+    cancelling = true;
+    currentPrintTask?.cancel();
+  };
+
   const onPrint = async () => {
     printState = "sending";
     error = "";
+    cancelling = false;
 
-    // do it in a stupid way (multi-page print not finished yet)
-    for (let curPage = 0; curPage < pagesTotal; curPage++) {
+    // One print task per page; the heartbeat stays off until all pages are out
+    for (let curPage = 0; curPage < pagesTotal && !cancelling; curPage++) {
       page = curPage;
-      console.log("Printing page", page);
+      console.debug("Printing page", page);
 
       await generatePreviewData(page);
 
-      if (!(await printImage(withOffset(processedCanvas, offset), quantity))) {
-        return;
-      }
+      if (!(await printImage(withOffset(processedCanvas, offset), quantity))) break;
 
-      await pageDelay(curPage, pagesTotal);
+      if (!cancelling) await pageDelay(curPage, pagesTotal);
     }
 
+    currentPrintTask = undefined;
+    cancelling = false;
     printState = "idle";
-    $printerClient.startHeartbeat();
+    printProgress = 0;
+    if (!$disconnected) $printerClient.startHeartbeat();
 
+    // The dialog may have been closed meanwhile: that doesn't cancel, the print runs on to the end
     if (printNow && !error) {
-      modalRef.hide();
+      modalRef?.hide();
     }
   };
 
@@ -364,7 +354,6 @@
       if (saved.density !== undefined) density = Math.min(Math.max(saved.density, densityMin), densityMax);
       if (saved.speed !== undefined) speed = saved.speed;
       if (saved.labelType !== undefined) labelType = saved.labelType;
-      if (saved.printTaskName !== undefined) printTaskName = saved.printTaskName;
       if (saved.offset !== undefined) offset = saved.offset;
       if (saved.dotGain !== undefined) dotGain = saved.dotGain;
     } catch (e) {
@@ -413,7 +402,7 @@
       }
     }
 
-    console.log("Page variables:", variables);
+    console.debug("Page variables:", variables);
 
     canvasPreprocess(fabricTempCanvas, variables);
 
@@ -469,10 +458,6 @@
 
   const isNative = Utils.getAvailableTransports().capacitorBle;
 
-  const onModalClose = () => {
-    endPrint();
-  };
-
   onMount(async () => {
     if (csvEnabled) {
       const parseResult = csvParse(csvData);
@@ -506,11 +491,6 @@
       pagesTotal = csvParsed.length;
     }
 
-    if (detectedPrintTaskName !== undefined) {
-      console.log(`Detected print task version: ${detectedPrintTaskName}`);
-      printTaskName = detectedPrintTaskName;
-    }
-
     loadProps();
 
     await generatePreviewData(page);
@@ -521,7 +501,7 @@
   });
 </script>
 
-<AppModal title={$tr("preview.title")} variant="fullscreen" onClose={onModalClose} bind:show bind:this={modalRef}>
+<AppModal title={$tr("preview.title")} variant="fullscreen" bind:show bind:this={modalRef}>
   <div class="preview-stage">
     {#if pagesTotal > 1}
       <button disabled={printState !== "idle" || page === 0} class="btn icon-btn" onclick={pageDown}>
@@ -568,7 +548,13 @@
   {#if printState !== "idle"}
     <div class="print-status">
       <div class="d-flex justify-content-between small mb-1">
-        <span>{printState === "sending" ? $tr("preview.status.sending") : $tr("preview.status.printing")}</span>
+        <span>
+          {cancelling
+            ? $tr("preview.status.cancelling")
+            : printState === "sending"
+              ? $tr("preview.status.sending")
+              : $tr("preview.status.printing")}
+        </span>
         {#if printState === "printing"}<span>{printProgress}%</span>{/if}
       </div>
       <div class="progress" role="progressbar" style="height: 6px">
@@ -796,7 +782,7 @@
     {/if}
 
     {#if printState !== "idle"}
-      <button type="button" class="btn btn-outline-danger" disabled={$disconnected} onclick={endPrint}>
+      <button type="button" class="btn btn-outline-danger" disabled={$disconnected || cancelling} onclick={onCancel}>
         {$tr("preview.print.cancel")}
       </button>
     {:else}

@@ -8,7 +8,7 @@ w 10ff20f2
 w 10ff50f1
 w 10ff40
 info {"modelId":"D11s_X","firmware":"D11s_X","serial":"D11s_X","battery":85,"charging":true,"status":"ready"}
-meta {"model":"D11s_X","driver":"d11s","printheadPixels":96,"printDirection":"left","densityMin":0,"densityMax":2,"densityDefault":2,"paperTypes":[1,2,3]} task=B1
+meta {"model":"D11s_X","driver":"d11s","printheadPixels":96,"printDirection":"left","densityMin":0,"densityMax":2,"densityDefault":2,"paperTypes":[1,2,3]}
 w 10ff40
 w 10ff100001
 w 10ff8400
