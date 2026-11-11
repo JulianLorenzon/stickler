@@ -54,11 +54,6 @@ export interface PrintProgressEvent {
   pageFeedProgress: number;
 }
 
-export interface FirmwareProgressEvent {
-  currentChunk: number;
-  totalChunks: number;
-}
-
 export interface Packet {
   command: number;
   toBytes(): Uint8Array;

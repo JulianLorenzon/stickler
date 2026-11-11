@@ -99,59 +99,59 @@ export const initClient = () => {
 
     newClient = instantiateClient();
 
-      const conf = get(appConfig);
+    const conf = get(appConfig);
 
-      if (conf.packetIntervalMs !== undefined) {
-        newClient.setPacketInterval(conf.packetIntervalMs);
+    if (conf.packetIntervalMs !== undefined) {
+      newClient.setPacketInterval(conf.packetIntervalMs);
+    }
+
+    newClient.on("packetsent", (e) => {
+      console.log(`>> ${Utils.bufToHex(e.packet.toBytes())}`);
+    });
+
+    newClient.on("packetreceived", (e) => {
+      console.log(`<< ${Utils.bufToHex(e.packet.toBytes())}`);
+    });
+
+    newClient.on("connect", (e) => {
+      console.log("onConnect");
+      heartbeatFails.set(0);
+      connectionState.set("connected");
+      connectedPrinterName.set(e.info.deviceName ?? "unknown");
+    });
+
+    newClient.on("printerinfofetched", (e) => {
+      console.log("printerInfoFetched");
+      printerInfo.set(e.info);
+      const meta = newClient.getModelMetadata();
+      printerMeta.set(meta);
+      designPrinter.set(meta.driver);
+    });
+
+    newClient.on("disconnect", () => {
+      console.log("onDisconnect");
+      connectionState.set("disconnected");
+      connectedPrinterName.set("");
+      connectedDeviceId.set(undefined);
+      printerInfo.set({});
+      printerMeta.set(undefined);
+    });
+
+    newClient.on("heartbeat", (e) => {
+      heartbeatFails.set(0);
+      heartbeatData.set(e.data);
+    });
+
+    newClient.on("heartbeatfailed", (e) => {
+      const maxFails = 5;
+      heartbeatFails.set(e.failedAttempts);
+
+      console.warn(`Heartbeat failed ${e.failedAttempts}/${maxFails}`);
+      if (e.failedAttempts >= maxFails) {
+        Toasts.error(get(tr)("connector.disconnect.heartbeat"));
+        newClient.disconnect();
       }
-
-      newClient.on("packetsent", (e) => {
-        console.log(`>> ${Utils.bufToHex(e.packet.toBytes())}`);
-      });
-
-      newClient.on("packetreceived", (e) => {
-        console.log(`<< ${Utils.bufToHex(e.packet.toBytes())}`);
-      });
-
-      newClient.on("connect", (e) => {
-        console.log("onConnect");
-        heartbeatFails.set(0);
-        connectionState.set("connected");
-        connectedPrinterName.set(e.info.deviceName ?? "unknown");
-      });
-
-      newClient.on("printerinfofetched", (e) => {
-        console.log("printerInfoFetched");
-        printerInfo.set(e.info);
-        const meta = newClient.getModelMetadata();
-        printerMeta.set(meta);
-        designPrinter.set(meta.driver);
-      });
-
-      newClient.on("disconnect", () => {
-        console.log("onDisconnect");
-        connectionState.set("disconnected");
-        connectedPrinterName.set("");
-        connectedDeviceId.set(undefined);
-        printerInfo.set({});
-        printerMeta.set(undefined);
-      });
-
-      newClient.on("heartbeat", (e) => {
-        heartbeatFails.set(0);
-        heartbeatData.set(e.data);
-      });
-
-      newClient.on("heartbeatfailed", (e) => {
-        const maxFails = 5;
-        heartbeatFails.set(e.failedAttempts);
-
-        console.warn(`Heartbeat failed ${e.failedAttempts}/${maxFails}`);
-        if (e.failedAttempts >= maxFails) {
-          Toasts.error(get(tr)("connector.disconnect.heartbeat"));
-          newClient.disconnect();
-        }
-      });
+    });
 
     return newClient;
   });

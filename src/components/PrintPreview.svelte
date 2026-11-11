@@ -118,7 +118,6 @@
         await $printerClient.abstraction.printEnd();
       }
 
-
       $printerClient.startHeartbeat();
     }
 
@@ -158,6 +157,8 @@
     } catch (e) {
       error = `${e}`;
       console.error(e);
+      // Back to idle (and the heartbeat back on), or the "Sending…" bar would run on next to the error
+      await endPrint();
       return false;
     }
 
@@ -776,7 +777,9 @@
           </div>
           <ParamLockButton propName="density" value={density} savedValue={savedProps.density} onClick={toggleSavedProp} />
         </div>
-        <div class="setting-hint">{$tr("preview.density.hint")}</div>
+        {#if targetPrinter === "d11s"}
+          <div class="setting-hint">{$tr("preview.density.hint")}</div>
+        {/if}
       </section>
     </details>
   </div>

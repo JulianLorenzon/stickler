@@ -1,4 +1,4 @@
-export { CLIENT_DEFAULTS, PRINTHEAD_PX } from "./constants";
+export { CLIENT_DEFAULTS } from "./constants";
 
 export {
   LabelType,
@@ -14,7 +14,6 @@ export type {
   ConnectionInfo,
   EncodedImage,
   PrintProgressEvent,
-  FirmwareProgressEvent,
   PrintTaskName,
   Packet,
 } from "./types";
@@ -29,6 +28,5 @@ export type { PrinterDriver, PrinterDriverId, RasterFormat } from "./drivers";
 
 export {
   PrinterClient,
-  BluetoothClient,
   instantiateClient,
 } from "./client";

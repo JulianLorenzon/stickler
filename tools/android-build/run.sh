@@ -33,5 +33,12 @@ elif [ $# -eq 0 ]; then
   set -- sh -c '[ -d node_modules ] || npm ci; npm run build && npx cap sync android && cd android && ./gradlew assembleRelease bundleRelease'
 fi
 
+# The image has no git, so tell the web build which commit it is (shown on the About screen): the short hash,
+# with "+" when there are uncommitted changes, as vite.config.ts does itself where git is available
+if [ -z "$COMMIT_HASH" ] && commit=$(git -C "$root" rev-parse --short=7 HEAD 2>/dev/null); then
+  [ -z "$(git -C "$root" status --porcelain --untracked-files=no)" ] || commit="$commit+"
+  COMMIT_HASH=$commit
+fi
+
 # shellcheck disable=SC2086
-docker run --rm $opts --user "$(id -u):$(id -g)" -v stickler-build-cache:/cache -v "$root:$root" -w "$root" $img "$@"
+docker run --rm $opts -e COMMIT_HASH="$COMMIT_HASH" --user "$(id -u):$(id -g)" -v stickler-build-cache:/cache -v "$root:$root" -w "$root" $img "$@"

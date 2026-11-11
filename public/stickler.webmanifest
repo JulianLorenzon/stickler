@@ -1,7 +1,7 @@
 {
   "name": "Stickler",
   "short_name": "Stickler",
-  "description": "Design and print labels on the Fichero D11s thermal label printer. No account, no tracking.",
+  "description": "Design and print labels on the Fichero D11s and MXW01 thermal printers. No account, no tracking.",
   "icons": [
     {
       "src": "logo.png",

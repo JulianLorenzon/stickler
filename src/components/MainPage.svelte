@@ -10,6 +10,8 @@
   import { printerSheetOpen } from "$/stores";
 
   // eslint-disable-next-line no-undef
+  const appVersion = __APP_VERSION__;
+  // eslint-disable-next-line no-undef
   const appCommit = __APP_COMMIT__;
   // eslint-disable-next-line no-undef
   const buildDate = __BUILD_DATE__;
@@ -55,6 +57,7 @@
           <div class="px-3 pb-1 small text-secondary">
             <div>{$tr("main.about")}</div>
             <div class="build-info">
+              {#if appVersion}{appVersion} ·{/if}
               {#if appCommit}{appCommit.slice(0, 8)} ·{/if}
               {$tr("main.built")}
               {buildDate}

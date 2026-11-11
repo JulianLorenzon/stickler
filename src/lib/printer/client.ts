@@ -20,7 +20,6 @@ import type {
   PrinterInfo,
   PrinterModelMeta,
   PrintProgressEvent,
-  FirmwareProgressEvent,
   Packet,
   PrintTaskName,
 } from "./types";
@@ -32,7 +31,6 @@ interface ClientEventMap {
   heartbeat: { data: HeartbeatData };
   heartbeatfailed: { failedAttempts: number };
   printprogress: PrintProgressEvent;
-  firmwareprogress: FirmwareProgressEvent;
   packetsent: { packet: Packet };
   packetreceived: { packet: Packet };
 }
@@ -411,12 +409,10 @@ export class CapBleClient extends PrinterClient {
 }
 
 // ---------------------------------------------------------------------------
-// Backwards-compat alias + factory
+// Factory
 // ---------------------------------------------------------------------------
 
-export class BluetoothClient extends WebBleClient {}
-
-export function instantiateClient(_type?: string): PrinterClient {
+export function instantiateClient(): PrinterClient {
   if (Capacitor.isNativePlatform()) {
     return new CapBleClient();
   }
