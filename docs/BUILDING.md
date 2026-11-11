@@ -115,7 +115,7 @@ The Android app is the same Svelte 5 + Fabric.js web UI, served from a Capacitor
 
 The factory function in `src/lib/printer/client.ts` checks `Capacitor.isNativePlatform()` at runtime and instantiates the right client. The rest of the app (label designer, print task, image encoding) is identical on both platforms.
 
-On Android, the printer chip in the top bar opens a sheet that scans for nearby printers (names starting `FICHERO` or `D11s_`, sorted by signal strength). Tap one to connect. The last used printer is remembered (`last_printer` in localStorage) and reconnected automatically on launch unless that is switched off in the sheet. Connection helpers live in `src/utils/printer_connection.ts`.
+On Android, the printer chip in the top bar opens a sheet that scans for nearby printers (the names the drivers in `src/lib/printer/drivers` recognise: `FICHERO`, `D11s_` and `MXW01`, sorted by signal strength). Tap one to connect. Printers connected before are remembered (`known_printers` in localStorage); on launch the app connects to the most recently used one that is switched on, unless that is switched off in the sheet. Connection helpers live in `src/utils/printer_connection.ts`.
 
 Other native integration:
 
