@@ -21,8 +21,10 @@
         if (m.methodName === "isEnabled") return reply(m, { value: true });
         if (m.methodName === "requestLEScan") {
           reply(m, {});
-          setTimeout(() => reply(scanCb, { device: { deviceId: "DC:0D:30:12:34:56", name: "D11s_3456" }, rssi: -55 }), 200);
-          setTimeout(() => reply(scanCb, { device: { deviceId: "DC:0D:30:AB:CD:EF", name: "FICHERO_ABCD" }, rssi: -82 }), 300);
+          // Shots can set window.__stubScan to [[deviceId, name, rssi], …] for other printers
+          const found = window.__stubScan || [["DC:0D:30:12:34:56", "D11s_3456", -55], ["DC:0D:30:AB:CD:EF", "FICHERO_ABCD", -82]];
+          found.forEach(([deviceId, name, rssi], i) =>
+            setTimeout(() => reply(scanCb, { device: { deviceId, name }, rssi }), 200 + i * 100));
           return;
         }
         if (m.methodName === "connect") {

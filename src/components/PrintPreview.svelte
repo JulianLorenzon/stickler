@@ -78,8 +78,10 @@
   const targetPrinter = $derived<PrinterId>($printerMeta?.driver ?? printerOf(labelProps));
   /** Dot gain model of that printer; without one there is no correction */
   const dotModel = $derived(dotModelFor(targetPrinter));
+  /** That printer's model data: the connected printer's, or the defaults of the label's printer */
+  const targetMeta = $derived($printerMeta ?? driverById(targetPrinter).meta({}));
   /** The offset matters where the print has to land on a label between gaps */
-  const hasLabelGaps = $derived(testHasLabelGaps($printerMeta ?? driverById(targetPrinter).meta({})));
+  const hasLabelGaps = $derived(testHasLabelGaps(targetMeta));
   let originalImage: ImageData;
   /** For "smart" mode: the visible parts of photos on a transparent background */
   let photoLayer: ImageData | undefined;
@@ -610,7 +612,7 @@
 
 
     <!-- Printers with one kind of paper (MXW01: continuous roll) don't need the choice -->
-    {#if $printerMeta === undefined || $printerMeta.paperTypes.length > 1}
+    {#if targetMeta.paperTypes.length > 1}
     <div class="setting">
       <span class="setting-label">{$tr("preview.label_type")}</span>
       <select class="form-select" bind:value={labelType} onchange={() => updateSavedProp("labelType", labelType)}>

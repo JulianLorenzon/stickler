@@ -313,7 +313,7 @@
     "preview.view.bitmap": "Bitmap",
     "preview.view.paper": "Gesimuleerd",
     "preview.view.bitmap.hint": "Precies wat naar de printer gaat, inclusief verschuiving.",
-    "preview.view.paper.hint": "Hoe de puntjes eruit zouden moeten komen. Een model op basis van een testafdruk van de D11s, dus een richtlijn, niet exact.",
+    "preview.view.paper.hint": "Hoe de puntjes eruit zouden moeten komen. Een model op basis van testafdrukken van deze printer, dus een richtlijn, niet exact.",
     "preview.dotgain": "Puntcorrectie",
     "preview.dotgain.hint": "Thermische punten vloeien in elkaar over en losse punten komen zwak op papier, dus grijs wordt contrastrijker afgedrukt dan op het scherm. Dit past het grijs aan vóór het ditheren, zodat het dichter bij het ontwerp uitkomt.",
     "preview.invert": "Omkeren",

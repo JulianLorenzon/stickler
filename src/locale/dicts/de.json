@@ -313,7 +313,7 @@
     "preview.view.bitmap": "Bitmap",
     "preview.view.paper": "Simuliert",
     "preview.view.bitmap.hint": "Genau das, was an den Drucker geht, inklusive Versatz.",
-    "preview.view.paper.hint": "Wie die Punkte gedruckt aussehen sollten. Ein Modell, angepasst an einen Testdruck des D11s, also ein Richtwert, nicht exakt.",
+    "preview.view.paper.hint": "Wie die Punkte gedruckt aussehen sollten. Ein Modell, angepasst an Testdrucke dieses Druckers, also ein Richtwert, nicht exakt.",
     "preview.dotgain": "Punktkorrektur",
     "preview.dotgain.hint": "Thermopunkte laufen ineinander und einzelne Punkte kommen blass heraus, deshalb druckt Grau kontrastreicher als auf dem Bildschirm. Das passt die Grautöne vor dem Dithering an, damit der Druck näher am Design liegt.",
     "preview.invert": "Invertieren",
