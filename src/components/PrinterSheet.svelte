@@ -17,7 +17,6 @@
   import AppModal from "$/components/basic/AppModal.svelte";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import BatteryIndicator from "$/components/basic/BatteryIndicator.svelte";
-  import CalibrationSection from "$/components/CalibrationSection.svelte";
   import {
     connectNative,
     connectWebBluetooth,
@@ -255,13 +254,6 @@
           </div>
         {/each}
       </div>
-    {/if}
-
-    {#if $printerMeta}
-      <details class="advanced mt-3">
-        <summary>{$tr("connector.calibration")}</summary>
-        <CalibrationSection meta={$printerMeta} />
-      </details>
     {/if}
 
     <details class="advanced mt-3">

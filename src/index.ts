@@ -51,14 +51,18 @@ const setupBackButton = async () => {
   const { App: CapApp } = await import("@capacitor/app");
 
   CapApp.addListener("backButton", () => {
+    // The camera screens are mounted on top of everything, a modal included (the calibration page opens one), and
+    // close themselves on "app:back"
+    const cameraOpen = document.querySelector("[role='dialog'][aria-modal='true']:not(.modal)") !== null;
+
     const openModals = document.querySelectorAll<HTMLElement>(".modal.show");
-    if (openModals.length > 0) {
+    if (openModals.length > 0 && !cameraOpen) {
       Modal.getInstance(openModals[openModals.length - 1])?.hide();
       return;
     }
 
     const openToggles = document.querySelectorAll<HTMLElement>("[data-bs-toggle='dropdown'].show");
-    if (openToggles.length > 0) {
+    if (openToggles.length > 0 && !cameraOpen) {
       openToggles.forEach((el) => Dropdown.getInstance(el)?.hide());
       return;
     }

@@ -24,7 +24,7 @@
   } from "$/utils/test_prints";
   import MdIcon from "$/components/basic/MdIcon.svelte";
 
-  /** Test prints for the connected printer, shown in the printer sheet */
+  /** Test prints for the connected printer, as steps on the calibration page */
   let { meta }: { meta: PrinterModelMeta } = $props();
 
   const printer = $derived(meta.driver);
@@ -34,7 +34,8 @@
   const hasModel = $derived(modelVersion >= 0 && dotModelFor(printer) !== undefined);
   const hasOwnModel = $derived(modelVersion >= 0 && ownDotModel(printer) !== undefined);
 
-  let busy = $state(false);
+  /** The test print being sent, so its button shows the spinner */
+  let busy = $state<"grey" | "offset" | undefined>();
   let corrected = $state(false);
   let offsetStep = $state<number>(DOTS_PER_MM);
   /** Offsets of the last printed strip, to pick from */
@@ -68,8 +69,8 @@
     if (delay !== undefined && delay > 0 && index < total - 1) await Utils.sleep(delay);
   };
 
-  const printPages = async (pages: HTMLCanvasElement[], opts: TestPrintOptions) => {
-    busy = true;
+  const printPages = async (what: "grey" | "offset", pages: HTMLCanvasElement[], opts: TestPrintOptions) => {
+    busy = what;
     try {
       for (let i = 0; i < pages.length; i++) {
         await printTestImage($printerClient, pages[i], opts);
@@ -79,7 +80,7 @@
       console.error(e);
       Toasts.error(e);
     } finally {
-      busy = false;
+      busy = undefined;
     }
   };
 
@@ -87,7 +88,7 @@
     const label = testLabel();
     const pages = greyTestPages(printer, meta, label, corrected && hasModel);
     // The offset is for labels; a strip on a roll prints as it is
-    return printPages(gaps ? pages.map((p) => withOffset(p, offset)) : pages, printOptions(label));
+    return printPages("grey", gaps ? pages.map((p) => withOffset(p, offset)) : pages, printOptions(label));
   };
 
   const printOffsetStrip = () => {
@@ -95,7 +96,7 @@
     const values = [...plan];
     offsetsPrinted = values;
     const pages = values.map((x, i) => withOffset(drawOffsetLabel(label.width, label.height, x, i), { ...offset, x }));
-    return printPages(pages, printOptions(label));
+    return printPages("offset", pages, printOptions(label));
   };
 
   /** Photos are scaled down to this many pixels on the long side before measuring; the patches are averaged anyway */
@@ -217,139 +218,232 @@
   };
 </script>
 
-<div class="calibration">
-  <div class="title">{$tr("preview.group.grey")}</div>
-  <p class="hint">{$tr(gaps ? "preview.grey.help" : "preview.grey.help.strip")}</p>
-  {#if hasModel}
-    <div class="form-check form-switch mb-2">
-      <input class="form-check-input" type="checkbox" role="switch" id="grey-corrected" bind:checked={corrected} />
-      <label class="form-check-label" for="grey-corrected">{$tr("calibration.grey.corrected")}</label>
-    </div>
-  {:else}
-    <p class="hint">{$tr("preview.grey.no_model")}</p>
-  {/if}
-  <button class="btn btn-secondary w-100" disabled={busy} onclick={printGreyTest}>
-    <MdIcon icon="gradient" />
-    {$tr("preview.grey.print")}
-  </button>
+<section class="block">
+  <h2 class="block-title">{$tr("calibration.dots.title")}</h2>
+  <p class="intro">{$tr("calibration.dots.intro")}</p>
 
-  <div class="title mt-3">{$tr("calibration.auto.title")}</div>
-  <p class="hint">
-    {$tr(gaps ? "calibration.auto.help.labels" : "calibration.auto.help")}
-    <br />{$tr("calibration.auto.paper")} <strong>{paperText}</strong>
-  </p>
-  {#if stripCameraAvailable()}
-    <button class="btn btn-secondary w-100 mb-2" disabled={measuring} onclick={measureWithCamera}>
-      <MdIcon icon="photo_camera" />
-      {$tr("calibration.auto.camera")}
-    </button>
-  {/if}
-  <button class="btn btn-secondary w-100" disabled={measuring} onclick={pickPhoto}>
-    <MdIcon icon="image" />
-    {$tr("calibration.auto.pick")}
-  </button>
-  {#if measuring}
-    <p class="hint mt-2 mb-0"><span class="spinner-border spinner-border-sm"></span> {$tr("calibration.auto.reading")}</p>
-  {/if}
-  {#if photoMessage}
-    <p class="hint mt-2 mb-0">{photoMessage}</p>
-  {/if}
-  {#if photoResult}
-    <img class="overlay mt-2" src={photoResult.overlay} alt="" />
-    <p class="hint mt-2">
-      {$tr("calibration.auto.error")}
-      <strong>{photoResult.fit.rms.toFixed(3)}</strong>
-      {#if photoResult.uneven}<br />{$tr("calibration.auto.uneven")}{/if}
-      {#if photoResult.fit.rms > 0.07}<br />{$tr("calibration.auto.poor")}{/if}
-    </p>
-    <button class="btn btn-primary w-100" onclick={useMeasured}>
-      <MdIcon icon="check" />
-      {$tr("calibration.auto.use")}
-    </button>
-  {/if}
-  {#if hasOwnModel}
-    <p class="hint mt-2">{$tr("calibration.auto.own")}</p>
-    <button class="btn btn-secondary w-100" onclick={dropMeasured}>
-      <MdIcon icon="restart_alt" />
-      {$tr("calibration.auto.reset")}
-    </button>
-  {/if}
-
-  {#if gaps}
-    <div class="title mt-3">{$tr("preview.calibration")}</div>
-    <div class="step">
-      <span>{$tr("calibration.offset.step")}</span>
-      <div class="btn-group" role="group">
-        {#each [DOTS_PER_MM / 2, DOTS_PER_MM] as step (step)}
-          <button
-            class="btn {offsetStep === step ? 'btn-primary' : 'btn-secondary'}"
-            onclick={() => (offsetStep = step)}>{step / DOTS_PER_MM} mm</button>
-        {/each}
-      </div>
-    </div>
+  <div class="step">
+    <div class="step-head"><span class="num">1</span>{$tr("calibration.step.print")}</div>
     <p class="hint">
-      {$tr("preview.calibration.help")}
-      {plan.map((v) => formatMm(v)).join(" · ")} mm
+      {$tr(gaps ? "calibration.grey.what.labels" : "calibration.grey.what")}
+      {$tr("calibration.auto.paper")} <strong>{paperText}</strong>
     </p>
-    <button class="btn btn-secondary w-100" disabled={busy} onclick={printOffsetStrip}>
-      <MdIcon icon="print" />
-      {$tr("preview.calibration.print")}
-    </button>
-
-    {#if offsetsPrinted.length > 0}
-      <p class="hint mt-2 mb-1">{$tr("preview.calibration.pick")}</p>
-      <div class="values">
-        {#each offsetsPrinted as v (v)}
-          <button class="btn {offset.x === v ? 'btn-primary' : 'btn-secondary'}" onclick={() => useOffset(v)}>
-            {formatMm(v)} mm
-          </button>
-        {/each}
+    {#if hasModel}
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" role="switch" id="grey-corrected" bind:checked={corrected} />
+        <label class="form-check-label" for="grey-corrected">{$tr("calibration.grey.corrected")}</label>
       </div>
+      <p class="hint">{$tr("calibration.grey.corrected.hint")}</p>
+    {:else}
+      <p class="hint">{$tr("calibration.grey.no_model")}</p>
     {/if}
-  {/if}
+    <button class="btn btn-secondary w-100" disabled={busy !== undefined} onclick={printGreyTest}>
+      {#if busy === "grey"}
+        <span class="spinner-border spinner-border-sm"></span>
+      {:else}
+        <MdIcon icon="gradient" />
+      {/if}
+      {$tr("preview.grey.print")}
+    </button>
+  </div>
 
-  {#if busy}
-    <p class="hint mt-2 mb-0"><span class="spinner-border spinner-border-sm"></span> {$tr("calibration.printing")}</p>
-  {/if}
-</div>
+  <div class="step">
+    <div class="step-head"><span class="num">2</span>{$tr("calibration.step.measure")}</div>
+    <p class="hint">{$tr(gaps ? "calibration.measure.help.labels" : "calibration.measure.help")}</p>
+    {#if stripCameraAvailable()}
+      <button class="btn btn-secondary w-100 mb-2" disabled={measuring} onclick={measureWithCamera}>
+        <MdIcon icon="photo_camera" />
+        {$tr("calibration.auto.camera")}
+      </button>
+    {/if}
+    <button class="btn btn-secondary w-100" disabled={measuring} onclick={pickPhoto}>
+      <MdIcon icon="image" />
+      {$tr("calibration.auto.pick")}
+    </button>
+    {#if measuring}
+      <p class="hint mt-2 mb-0"><span class="spinner-border spinner-border-sm"></span> {$tr("calibration.auto.reading")}</p>
+    {/if}
+    {#if photoMessage}
+      <p class="message mt-2 mb-0">{photoMessage}</p>
+    {/if}
+  </div>
+
+  <div class="step">
+    <div class="step-head"><span class="num">3</span>{$tr("calibration.step.result")}</div>
+    {#if photoResult}
+      <img class="overlay" src={photoResult.overlay} alt="" />
+      <p class="hint mt-2">
+        {$tr("calibration.auto.error")}
+        <strong>{photoResult.fit.rms.toFixed(3)}</strong>
+      </p>
+      {#if photoResult.uneven}<p class="message">{$tr("calibration.auto.uneven")}</p>{/if}
+      {#if photoResult.fit.rms > 0.07}<p class="message">{$tr("calibration.auto.poor")}</p>{/if}
+      <button class="btn btn-primary w-100" onclick={useMeasured}>
+        <MdIcon icon="check" />
+        {$tr("calibration.auto.use")}
+      </button>
+    {:else if !hasOwnModel}
+      <p class="hint mb-0">{$tr("calibration.result.empty")}</p>
+    {/if}
+    {#if hasOwnModel}
+      <p class="hint" class:mt-3={photoResult !== undefined}>{$tr("calibration.auto.own")}</p>
+      <button class="btn btn-secondary w-100" onclick={dropMeasured}>
+        <MdIcon icon="restart_alt" />
+        {$tr("calibration.auto.reset")}
+      </button>
+    {/if}
+  </div>
+</section>
+
+{#if gaps}
+  <section class="block">
+    <h2 class="block-title">{$tr("calibration.offset.title")}</h2>
+    <p class="intro">{$tr("calibration.offset.intro")}</p>
+
+    <div class="step">
+      <div class="step-head"><span class="num">1</span>{$tr("calibration.offset.step.print")}</div>
+      <div class="step-size">
+        <span>{$tr("calibration.offset.step_size")}</span>
+        <div class="btn-group" role="group">
+          {#each [DOTS_PER_MM / 2, DOTS_PER_MM] as step (step)}
+            <button
+              class="btn {offsetStep === step ? 'btn-primary' : 'btn-secondary'}"
+              onclick={() => (offsetStep = step)}>{step / DOTS_PER_MM} mm</button>
+          {/each}
+        </div>
+      </div>
+      <p class="hint">
+        {$tr("calibration.offset.strip")}
+        <strong>{plan.map((v) => formatMm(v)).join(" · ")} mm</strong>
+      </p>
+      <button class="btn btn-secondary w-100" disabled={busy !== undefined} onclick={printOffsetStrip}>
+        {#if busy === "offset"}
+          <span class="spinner-border spinner-border-sm"></span>
+        {:else}
+          <MdIcon icon="print" />
+        {/if}
+        {$tr("preview.calibration.print")}
+      </button>
+    </div>
+
+    <div class="step">
+      <div class="step-head"><span class="num">2</span>{$tr("calibration.offset.step.pick")}</div>
+      {#if offsetsPrinted.length > 0}
+        <p class="hint">{$tr("calibration.offset.pick")}</p>
+        <div class="values">
+          {#each offsetsPrinted as v (v)}
+            <button class="btn {offset.x === v ? 'btn-primary' : 'btn-secondary'}" onclick={() => useOffset(v)}>
+              {formatMm(v)} mm
+            </button>
+          {/each}
+        </div>
+      {:else}
+        <p class="hint mb-0">{$tr("calibration.offset.pick.empty")}</p>
+      {/if}
+    </div>
+  </section>
+{/if}
 
 <style>
-  .calibration {
-    padding-top: 0.25rem;
+  .block {
+    margin-top: 1rem;
   }
 
-  .title {
+  .block + .block {
+    margin-top: 2rem;
+  }
+
+  .block-title {
     font-size: 0.75rem;
     font-weight: 600;
-    text-transform: uppercase;
     letter-spacing: 0.06em;
+    text-transform: uppercase;
     color: var(--ink-tertiary);
-    margin-bottom: 0.25rem;
+    margin: 0 0 0.375rem;
+  }
+
+  .intro {
+    font-size: 0.875rem;
+    color: var(--ink-secondary);
+    margin: 0 0 0.75rem;
+  }
+
+  /* A numbered step: a card like the printer card in the printer sheet */
+  .step {
+    padding: 0.875rem;
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    border: 1px solid var(--border-standard);
+  }
+
+  .step + .step {
+    margin-top: 0.5rem;
+  }
+
+  .step-head {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .num {
+    flex: none;
+    width: 1.625rem;
+    height: 1.625rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 0.8125rem;
+    background: var(--accent-subtle);
+    color: var(--accent);
   }
 
   .hint {
     font-size: 0.8125rem;
-    color: var(--ink-tertiary);
+    color: var(--ink-secondary);
     margin: 0 0 0.5rem;
+  }
+
+  .hint strong {
+    color: var(--ink-primary);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* Something went wrong or may be off: stands out from the hints */
+  .message {
+    font-size: 0.8125rem;
+    color: var(--status-warn);
+    margin: 0 0 0.5rem;
+  }
+
+  .form-switch {
+    min-height: 2.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0;
+  }
+
+  .btn {
+    min-height: 2.75rem;
   }
 
   .overlay {
     display: block;
     width: 100%;
-    border-radius: 0.375rem;
+    border-radius: var(--radius-sm);
   }
 
-  .step {
+  .step-size {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
     margin-bottom: 0.5rem;
-  }
-
-  .step .btn,
-  .values .btn {
-    min-height: 2.75rem;
+    font-size: 0.875rem;
   }
 
   .values {

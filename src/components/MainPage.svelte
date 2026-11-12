@@ -7,6 +7,7 @@
   import AboutDialog from "$/components/AboutDialog.svelte";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import PrinterSheet from "$/components/PrinterSheet.svelte";
+  import CalibrationPage from "$/components/CalibrationPage.svelte";
   import { printerSheetOpen } from "$/stores";
 
   // eslint-disable-next-line no-undef
@@ -18,6 +19,7 @@
 
   let debugStuffShow = $state<boolean>(false);
   let aboutShow = $state<boolean>(false);
+  let calibrationShow = $state<boolean>(false);
 </script>
 
 <div class="app-shell">
@@ -45,6 +47,10 @@
             </select>
           </div>
           <div class="dropdown-divider"></div>
+          <button class="dropdown-item" onclick={() => (calibrationShow = true)}>
+            <MdIcon icon="tune" />
+            {$tr("calibration.title")}
+          </button>
           <button class="dropdown-item" onclick={() => (debugStuffShow = true)}>
             <MdIcon icon="bug_report" />
             {$tr("debug.title")}
@@ -74,6 +80,11 @@
     <LabelDesigner />
   </main>
 </div>
+
+<!-- Before the printer sheet, which it can open: a later modal lies on top, and the back button closes the last one -->
+{#if calibrationShow}
+  <CalibrationPage bind:show={calibrationShow} />
+{/if}
 
 {#if $printerSheetOpen}
   <PrinterSheet bind:show={$printerSheetOpen} />

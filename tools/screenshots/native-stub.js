@@ -18,6 +18,11 @@
       const m = JSON.parse(str);
       if (m.type === "message" || m.callbackId) {
         if (m.methodName === "addListener" && m.options?.eventName === "onScanResult") { scanCb = m; return; }
+        // Shots press the Android back button with window.__stubBack()
+        if (m.methodName === "addListener" && m.options?.eventName === "backButton") {
+          window.__stubBack = () => reply(m, { canGoBack: false });
+          return;
+        }
         if (m.methodName === "isEnabled") return reply(m, { value: true });
         if (m.methodName === "requestLEScan") {
           reply(m, {});
