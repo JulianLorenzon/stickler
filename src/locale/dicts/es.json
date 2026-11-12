@@ -197,7 +197,7 @@
     "calibration.auto.title": "Corrección a partir de una foto",
     "calibration.auto.help": "Imprime la prueba de grises sin corrección de puntos y ponla plana con luz uniforme (luz de día, sin sombras). Apunta la cámara a la pieza entera: Stickler mide los grises en cuanto los ve y calcula la corrección de puntos de esta impresora. También sirve una foto hecha antes.",
     "calibration.auto.camera": "Medir con la cámara",
-    "calibration.auto.cam.hint": "Encuadra toda la prueba de grises, plana y con luz uniforme",
+    "calibration.auto.cam.hint": "Coloca la prueba de grises en el recuadro, plana y con luz uniforme",
     "calibration.auto.cam.closer": "Acércate",
     "calibration.auto.cam.hold": "No te muevas…",
     "calibration.auto.pick": "Elegir una foto de la prueba de grises",

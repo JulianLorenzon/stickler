@@ -108,7 +108,8 @@ const percentile = (L: Float32Array, p: number): number => {
 
 /** Solid dark areas of about a patch's shape: connected cells that are nearly all dark, clear of the photo's edge */
 const solidBlobs = (L: Float32Array, w: number, h: number, darkBelow: number): Blob[] => {
-  const c = Math.max(3, Math.round(Math.max(w, h) / 320));
+  // Small cells, so the strip can be small in the picture: a patch still covers 40 of them at 0.8 px per dot
+  const c = Math.max(2, Math.round(Math.max(w, h) / 480));
   const gw = Math.floor(w / c);
   const gh = Math.floor(h / c);
   const solid = new Uint8Array(gw * gh);
@@ -325,8 +326,9 @@ const readColumn = (
 export const readGreyStrip = (photo: Pixels, W: number, rowH: number): StripReading | StripFailure => {
   const { width: w, height: h } = photo;
   const L = luminance(photo);
-  // Paper is the bright part of the photo; solid ink is well under half of it
-  const paper = percentile(L, 0.9);
+  // Paper is the brightest part of the photo, even when the strip is small on a dark table (a few percent of the
+  // picture); solid ink is well under half of it
+  const paper = percentile(L, 0.97);
   const columns = patchColumns(solidBlobs(L, w, h, 0.42 * paper));
   if (columns.length === 0) return "not_found";
 

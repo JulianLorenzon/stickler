@@ -197,7 +197,7 @@
     "calibration.auto.title": "Korrektur aus einem Foto",
     "calibration.auto.help": "Drucke den Graustufentest ohne Punktkorrektur und lege ihn flach in gleichmäßiges Licht (Tageslicht, keine Schatten). Richte die Kamera auf das ganze Stück: Stickler misst die Grautöne, sobald es sie sieht, und ermittelt die Punktkorrektur für diesen Drucker. Ein früher aufgenommenes Foto geht auch.",
     "calibration.auto.camera": "Mit der Kamera messen",
-    "calibration.auto.cam.hint": "Den ganzen Graustufentest ins Bild nehmen, flach und in gleichmäßigem Licht",
+    "calibration.auto.cam.hint": "Den Graustufentest in den Rahmen halten, flach und in gleichmäßigem Licht",
     "calibration.auto.cam.closer": "Näher herangehen",
     "calibration.auto.cam.hold": "Ruhig halten…",
     "calibration.auto.pick": "Foto des Graustufentests wählen",

@@ -197,7 +197,7 @@
     "calibration.auto.title": "Korekcja ze zdjęcia",
     "calibration.auto.help": "Wydrukuj test szarości bez korekcji punktów i połóż go płasko w równym świetle (światło dzienne, bez cieni). Skieruj aparat na cały kawałek: Stickler zmierzy szarości, gdy tylko je zobaczy, i wyznaczy korekcję punktów dla tej drukarki. Można też użyć zdjęcia zrobionego wcześniej.",
     "calibration.auto.camera": "Zmierz aparatem",
-    "calibration.auto.cam.hint": "Zmieść cały test szarości w kadrze, płasko i w równym świetle",
+    "calibration.auto.cam.hint": "Umieść test szarości w ramce, płasko i w równym świetle",
     "calibration.auto.cam.closer": "Podejdź bliżej",
     "calibration.auto.cam.hold": "Nie ruszaj…",
     "calibration.auto.pick": "Wybierz zdjęcie testu szarości",

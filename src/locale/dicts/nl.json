@@ -197,7 +197,7 @@
     "calibration.auto.title": "Correctie uit een foto",
     "calibration.auto.help": "Druk de grijstest af zonder puntcorrectie en leg hem vlak in gelijkmatig licht (daglicht, geen schaduwen). Richt de camera op het hele stuk: Stickler meet de grijstinten zodra het ze ziet en berekent de puntcorrectie voor deze printer. Een eerder gemaakte foto werkt ook.",
     "calibration.auto.camera": "Meten met de camera",
-    "calibration.auto.cam.hint": "Zorg dat de hele grijstest in beeld is, vlak en in gelijkmatig licht",
+    "calibration.auto.cam.hint": "Houd de grijstest in het kader, vlak en in gelijkmatig licht",
     "calibration.auto.cam.closer": "Kom dichterbij",
     "calibration.auto.cam.hold": "Stilhouden…",
     "calibration.auto.pick": "Foto van de grijstest kiezen",

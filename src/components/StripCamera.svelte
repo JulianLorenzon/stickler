@@ -19,11 +19,19 @@
    * Our own camera instead of the phone's camera app: video frames come without HDR, sharpening or scene modes, which
    * shift greys, and several frames can be put together. The resolution is plenty: the patches are averaged anyway.
    */
-  const FRAMES = 8;
-  /** Frames are scaled down to this many pixels on the long side before reading */
-  const SIDE = 960;
-  /** Photo pixels per printer dot below which the strip is too small in the picture to trust */
-  const MIN_SCALE = 1.2;
+  const FRAMES = 16;
+  /** Frames are read at up to this many pixels on the long side: full HD as it comes */
+  const SIDE = 1920;
+  /**
+   * Frame pixels per printer dot below which the strip is too small in the picture to trust. At 0.8 the print is a
+   * third of the frame's width, so no phone has to focus closer than it can; the greys read the same down to there
+   * (tools/dot-gain: a photo shrunk to 0.8 px per dot stays within 0.01).
+   */
+  const MIN_SCALE = 0.8;
+  /** The outline shows the print at this part of the frame's short side: a comfortable distance, not a requirement */
+  const GUIDE_WIDTH = 0.45;
+  /** A frame only counts when the strip moved slower than this since the frame before (dots per second; 8 dots = 1 mm) */
+  const MAX_SPEED = 100;
 
   let video: HTMLVideoElement;
   let boxes: HTMLCanvasElement;
@@ -39,6 +47,8 @@
   const wctx = work.getContext("2d", { willReadFrequently: true })!;
   let good: StripReading[] = [];
   let lastGood = 0;
+  /** Where the strip was in the frame before, and when, to tell a steady hand from a moving one */
+  let before: { marks: [number, number][]; at: number } | undefined;
 
   const strokeQuads = (ctx: CanvasRenderingContext2D, quads: Quad[], colour: string) => {
     ctx.strokeStyle = colour;
@@ -50,13 +60,37 @@
     }
   };
 
-  const drawBoxes = (canvas: HTMLCanvasElement, reading: StripReading | undefined, clear: boolean) => {
-    if (clear) {
+  /** Where to hold the print, about: its outline with the four rows of patches, in the middle of the frame */
+  const drawGuide = (ctx: CanvasRenderingContext2D, w: number, h: number, counting: boolean) => {
+    const rows = 4;
+    const gw = GUIDE_WIDTH * Math.min(w, h);
+    const gh = (gw * rows * rowHeight) / width;
+    const x = (w - gw) / 2, y = (h - gh) / 2;
+    ctx.lineWidth = Math.max(2, w / 300);
+    ctx.strokeStyle = counting ? "#4cd964" : "rgba(255, 255, 255, 0.85)";
+    ctx.setLineDash([ctx.lineWidth * 5, ctx.lineWidth * 3]);
+    ctx.strokeRect(x, y, gw, gh);
+    ctx.setLineDash([]);
+    if (counting) return;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
+    for (let r = 0; r < rows; r++) ctx.fillRect(x + gw * 0.02, y + (gh / rows) * (r + 0.24), gw * 0.96, (gh / rows) * 0.56);
+  };
+
+  /** Middle of the first and the last row's solid patch */
+  const marksOf = (reading: StripReading): [number, number][] =>
+    [reading.patchBoxes[9], reading.patchBoxes[reading.patchBoxes.length - 1]].map((q) => [
+      (q[0][0] + q[2][0]) / 2,
+      (q[0][1] + q[2][1]) / 2,
+    ]);
+
+  const drawBoxes = (canvas: HTMLCanvasElement, reading: StripReading | undefined, live: boolean, counting = false) => {
+    const ctx = canvas.getContext("2d")!;
+    if (live) {
       canvas.width = work.width;
       canvas.height = work.height;
+      drawGuide(ctx, canvas.width, canvas.height, counting);
     }
     if (!reading) return;
-    const ctx = canvas.getContext("2d")!;
     ctx.lineWidth = Math.max(2, canvas.width / 400);
     strokeQuads(ctx, reading.paperBoxes, "#2a9df4");
     strokeQuads(ctx, reading.patchBoxes, "#e53935");
@@ -98,17 +132,26 @@
     if (typeof reading === "string") {
       // A missed frame or two (focus hunting, a shaky hand) doesn't throw away what's collected
       if (now - lastGood > 1500) good = [];
+      before = undefined;
       status = good.length > 0 ? "hold" : "search";
       drawBoxes(boxes, undefined, true);
     } else if (reading.scale < MIN_SCALE) {
       good = [];
+      before = undefined;
       status = "closer";
       drawBoxes(boxes, reading, true);
     } else {
-      good.push(reading);
+      // Blurred frames read too grey: only frames where the strip barely moved since the one before count
+      const marks = marksOf(reading);
+      const steady =
+        before !== undefined &&
+        Math.max(...marks.map((m, i) => Math.hypot(m[0] - before!.marks[i][0], m[1] - before!.marks[i][1]))) /
+          reading.scale / ((now - before.at) / 1000) < MAX_SPEED;
+      before = { marks, at: now };
+      if (steady) good.push(reading);
       lastGood = now;
       status = "hold";
-      drawBoxes(boxes, reading, true);
+      drawBoxes(boxes, reading, true, steady);
       if (good.length >= FRAMES) {
         drawBoxes(work, reading, false);
         finish({
