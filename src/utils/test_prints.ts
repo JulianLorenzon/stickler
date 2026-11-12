@@ -7,7 +7,10 @@ import type { PrintDirection, PrinterModelMeta } from "$/lib/printer";
 import { LabelType, type PrinterClient } from "$/lib/printer";
 import type { LabelProps, PostProcessType, PrinterId, PreviewPropsOffset } from "$/types";
 import { applyCurve, atkinson, bayer, blueNoiseDither, floydSteinberg, threshold, werness } from "$/utils/post_process";
+import { GREY_TEST_LEVELS, GREY_TEST_MODES, greyRowLayout } from "$/utils/grey_strip";
 import { dotGainCurve, dotModelFor } from "$/utils/print_sim";
+
+export { GREY_TEST_MODES };
 
 /**
  * The dot gain correction for a printer and dither mode, or undefined when the printer has no dot model or the mode
@@ -42,7 +45,7 @@ export const dotGainCurveFor = (
 export type TestLabel = { width: number; height: number; direction: PrintDirection };
 
 /** Height of one row of the grey test on a continuous roll */
-const GREY_ROW = 14 * DOTS_PER_MM;
+export const GREY_ROW = 14 * DOTS_PER_MM;
 
 /**
  * Size and direction of a test label for a printer: the label last open in the designer when it's for that printer,
@@ -120,15 +123,6 @@ export const drawOffsetLabel = (W: number, H: number, xOffset: number, index: nu
   return canvas;
 };
 
-/** The dither modes on the grey test, with the settings the print preview uses for photos (Atkinson at 128) */
-export const GREY_TEST_MODES: { name: string; mode: PostProcessType; dither: (iData: ImageData) => ImageData }[] = [
-  { name: "Atkinson", mode: "dither", dither: (iData) => atkinson(iData, 128) },
-  { name: "Floyd–Steinberg", mode: "floyd", dither: (iData) => floydSteinberg(iData, 128) },
-  { name: "Blue noise", mode: "bluenoise", dither: blueNoiseDither },
-  { name: "Werness", mode: "werness", dither: werness },
-];
-const GREY_TEST_LEVELS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
-
 /**
  * A row of grey patches from 10 to 100% ink, dithered without any tone change, with the mode name above and the
  * percentages below. Photographed in even light it shows how much darker each grey prints (dot gain). With a
@@ -142,13 +136,8 @@ export const drawGreyLabel = (
 ): HTMLCanvasElement => {
   const { canvas, ctx } = blank(W, H);
 
-  const margin = Math.round(DOTS_PER_MM / 2);
-  const gap = 2;
-  const top = Math.round(H * 0.24);
-  const bottom = Math.round(H * 0.8);
-  const n = GREY_TEST_LEVELS.length;
-  const pw = Math.floor((W - 2 * margin - (n - 1) * gap) / n);
-  const x0 = Math.round((W - n * pw - (n - 1) * gap) / 2);
+  // The layout is shared with the code that reads the strip back from a photo
+  const { gap, pw, x0, top, bottom } = greyRowLayout(W, H, DOTS_PER_MM);
 
   GREY_TEST_LEVELS.forEach((level, i) => {
     const v = Math.round(255 * (1 - level / 100));

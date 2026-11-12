@@ -23,3 +23,20 @@ docker run --rm -v "$PWD/tools/dot-gain:/s:ro" -v /path/photo.jpg:/in/photo.jpg:
 tools/android-build/run.sh sh -c 'npx esbuild tools/dot-gain/entry.ts --bundle --format=esm \
   --outfile=tools/dot-gain/bundle.mjs && MINBASE=0.15 node tools/dot-gain/fit_strip.mjs "$(cat tools/dot-gain/mxw01-2026-11-10.json)"'
 ```
+
+## The app's own reading and fit
+
+The app does the same on the phone (printer sheet, Calibration, "Correction from a photo"): `src/utils/grey_strip.ts`
+finds the strip in a photo, measures it and fits the model. `calibrate.mjs` runs that code on photos here, to compare
+with the scripts above or to try a photo that the app reads badly. Node has no JPEG decoder, so `to_raw.py` turns the
+photo into raw pixels first (it can also turn or shrink it). Scratch files go in `tools/dot-gain/out/` (ignored).
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/s/out -v "$PWD/tools/dot-gain:/s" python:3.12-slim sh -c \
+  "pip install -q --target /s/out/pylib pillow; PYTHONPATH=/s/out/pylib python /s/to_raw.py /s/out/photo.jpg /s/out/photo.rgba"
+tools/android-build/run.sh sh -c 'npx esbuild tools/dot-gain/entry.ts --bundle --format=esm --alias:$=./src \
+  --outfile=tools/dot-gain/bundle.mjs && node tools/dot-gain/calibrate.mjs tools/dot-gain/out/photo.rgba'
+```
+
+A `+` after a file name marks a strip printed with dot correction (`PRINTED='{"base":…}'` gives the model it was
+printed with); `START` sets the model the fit starts from.

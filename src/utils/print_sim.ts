@@ -52,7 +52,44 @@ export const MXW01_DOT_MODEL: DotModel = {
  */
 const DOT_MODELS: Partial<Record<PrinterId, DotModel>> = { d11s: D11S_DOT_MODEL, mxw01: MXW01_DOT_MODEL };
 
-export const dotModelFor = (printer: PrinterId): DotModel | undefined => DOT_MODELS[printer];
+export const builtInDotModel = (printer: PrinterId): DotModel | undefined => DOT_MODELS[printer];
+
+/** Models fitted on this phone from a photo of the grey test (printer sheet, Calibration); they go before ours */
+const OWN_MODELS_KEY = "dot_models";
+let ownModels: Partial<Record<PrinterId, DotModel>> | undefined;
+
+const loadOwnModels = (): Partial<Record<PrinterId, DotModel>> => {
+  if (ownModels) return ownModels;
+  ownModels = {};
+  try {
+    const stored = JSON.parse(localStorage.getItem(OWN_MODELS_KEY) ?? "{}");
+    for (const printer of Object.keys(DOT_MODELS) as PrinterId[]) {
+      const m = stored[printer];
+      const keys = ["base", "orth", "diag", "spillOrth", "spillDiag"] as const;
+      if (m && keys.every((k) => typeof m[k] === "number" && m[k] >= 0 && m[k] <= 1)) {
+        ownModels[printer] = Object.fromEntries(keys.map((k) => [k, m[k]])) as unknown as DotModel;
+      }
+    }
+  } catch (e) {
+    console.warn("Stored dot models unreadable:", e);
+  }
+  return ownModels;
+};
+
+export const ownDotModel = (printer: PrinterId): DotModel | undefined => loadOwnModels()[printer];
+
+/** Keeps a model fitted on this phone for `printer`, or with no model goes back to the built-in one */
+export const setOwnDotModel = (printer: PrinterId, model?: DotModel) => {
+  const all = { ...loadOwnModels() };
+  if (model) all[printer] = model;
+  else delete all[printer];
+  localStorage.setItem(OWN_MODELS_KEY, JSON.stringify(all));
+  ownModels = all;
+  // The cached curves were made for the model before
+  curves.clear();
+};
+
+export const dotModelFor = (printer: PrinterId): DotModel | undefined => ownDotModel(printer) ?? DOT_MODELS[printer];
 
 /** Paper and ink colours of the Fichero labels, for drawing the simulation */
 const PAPER = [244, 240, 234];

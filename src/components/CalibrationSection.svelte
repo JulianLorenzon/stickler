@@ -5,12 +5,14 @@
   import { DOTS_PER_MM } from "$/defaults";
   import { tr } from "$/utils/i18n";
   import { LocalStoragePersistence } from "$/utils/persistence";
-  import { dotModelFor } from "$/utils/print_sim";
+  import { fitDotModel, readGreyStrip, type DotFit } from "$/utils/grey_strip";
+  import { builtInDotModel, D11S_DOT_MODEL, dotModelFor, ownDotModel, setOwnDotModel } from "$/utils/print_sim";
   import { Toasts } from "$/utils/toasts";
   import { Utils } from "$/lib/printer";
   import {
     drawOffsetLabel,
     formatMm,
+    GREY_ROW,
     greyTestPages,
     hasLabelGaps,
     offsetPlan,
@@ -26,7 +28,10 @@
 
   const printer = $derived(meta.driver);
   const gaps = $derived(hasLabelGaps(meta));
-  const hasModel = $derived(dotModelFor(printer) !== undefined);
+  /** Bumped when a correction measured here is saved or dropped, since the models live outside Svelte */
+  let modelVersion = $state(0);
+  const hasModel = $derived(modelVersion >= 0 && dotModelFor(printer) !== undefined);
+  const hasOwnModel = $derived(modelVersion >= 0 && ownDotModel(printer) !== undefined);
 
   let busy = $state(false);
   let corrected = $state(false);
@@ -92,6 +97,85 @@
     return printPages(pages, printOptions(label));
   };
 
+  /** Photos are scaled down to this many pixels on the long side before measuring; the patches are averaged anyway */
+  const PHOTO_SIDE = 1600;
+
+  let measuring = $state(false);
+  let photoMessage = $state("");
+  /** The photo with the measured boxes drawn in, and the model fitted to it */
+  let photoResult = $state<{ overlay: string; fit: DotFit; uneven: boolean } | undefined>();
+
+  /** Measure a photo of the grey test (printed without correction) and fit this printer's dot model to it */
+  const measurePhoto = async (file: Blob) => {
+    measuring = true;
+    photoMessage = "";
+    photoResult = undefined;
+    try {
+      // createImageBitmap turns the photo upright (EXIF)
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, PHOTO_SIDE / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+
+      const width = testLabel().width;
+      const reading = readGreyStrip(ctx.getImageData(0, 0, canvas.width, canvas.height), width, GREY_ROW);
+      if (typeof reading === "string") {
+        photoMessage = $tr("calibration.auto.not_found");
+        return;
+      }
+      const fit = fitDotModel([{ measured: reading.measured }], width, GREY_ROW, builtInDotModel(printer) ?? D11S_DOT_MODEL);
+
+      ctx.lineWidth = Math.max(2, canvas.width / 400);
+      for (const [boxes, colour] of [[reading.paperBoxes, "#2a9df4"], [reading.patchBoxes, "#e53935"]] as const) {
+        ctx.strokeStyle = colour;
+        for (const q of boxes) {
+          ctx.beginPath();
+          q.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+          ctx.closePath();
+          ctx.stroke();
+        }
+      }
+      photoResult = { overlay: canvas.toDataURL("image/jpeg", 0.8), fit, uneven: reading.paperEvenness < 0.75 };
+    } catch (e) {
+      console.error(e);
+      photoMessage = $tr("calibration.auto.failed");
+    } finally {
+      measuring = false;
+    }
+  };
+
+  const pickPhoto = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (file) measurePhoto(file);
+    };
+    input.click();
+  };
+
+  const useMeasured = () => {
+    if (!photoResult) return;
+    try {
+      setOwnDotModel(printer, photoResult.fit.model);
+      modelVersion++;
+      photoResult = undefined;
+      Toasts.message($tr("calibration.auto.saved"));
+    } catch (e) {
+      Toasts.error(e);
+    }
+  };
+
+  const dropMeasured = () => {
+    setOwnDotModel(printer);
+    modelVersion++;
+  };
+
   /** An offset picked from a test strip is a calibration: the print preview uses it from now on */
   const useOffset = (x: number) => {
     offset = { ...offset, x };
@@ -119,6 +203,42 @@
     <MdIcon icon="gradient" />
     {$tr("preview.grey.print")}
   </button>
+
+  {#if !gaps}
+    <!-- Only the one-piece strip of a roll can be read from a photo (see grey_strip.ts) -->
+    <div class="title mt-3">{$tr("calibration.auto.title")}</div>
+    <p class="hint">{$tr("calibration.auto.help")}</p>
+    <button class="btn btn-secondary w-100" disabled={measuring} onclick={pickPhoto}>
+      <MdIcon icon="photo_camera" />
+      {$tr("calibration.auto.pick")}
+    </button>
+    {#if measuring}
+      <p class="hint mt-2 mb-0"><span class="spinner-border spinner-border-sm"></span> {$tr("calibration.auto.reading")}</p>
+    {/if}
+    {#if photoMessage}
+      <p class="hint mt-2 mb-0">{photoMessage}</p>
+    {/if}
+    {#if photoResult}
+      <img class="overlay mt-2" src={photoResult.overlay} alt="" />
+      <p class="hint mt-2">
+        {$tr("calibration.auto.error")}
+        <strong>{photoResult.fit.rms.toFixed(3)}</strong>
+        {#if photoResult.uneven}<br />{$tr("calibration.auto.uneven")}{/if}
+        {#if photoResult.fit.rms > 0.07}<br />{$tr("calibration.auto.poor")}{/if}
+      </p>
+      <button class="btn btn-primary w-100" onclick={useMeasured}>
+        <MdIcon icon="check" />
+        {$tr("calibration.auto.use")}
+      </button>
+    {/if}
+    {#if hasOwnModel}
+      <p class="hint mt-2">{$tr("calibration.auto.own")}</p>
+      <button class="btn btn-secondary w-100" onclick={dropMeasured}>
+        <MdIcon icon="restart_alt" />
+        {$tr("calibration.auto.reset")}
+      </button>
+    {/if}
+  {/if}
 
   {#if gaps}
     <div class="title mt-3">{$tr("preview.calibration")}</div>
@@ -176,6 +296,12 @@
     font-size: 0.8125rem;
     color: var(--ink-tertiary);
     margin: 0 0 0.5rem;
+  }
+
+  .overlay {
+    display: block;
+    width: 100%;
+    border-radius: 0.375rem;
   }
 
   .step {

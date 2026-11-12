@@ -16,3 +16,4 @@ CLAUDE.md
 /tools/scan-test/out
 /tools/dot-gain/bundle.mjs
 *:Zone.Identifier
+/tools/dot-gain/out
