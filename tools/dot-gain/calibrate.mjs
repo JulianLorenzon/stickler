@@ -18,11 +18,12 @@ for (const arg of process.argv.slice(2)) {
   const ms = performance.now() - t0;
   console.log(`\n${arg}  ${photo.width}x${photo.height}  read in ${ms.toFixed(0)} ms`);
   if (typeof r === "string") { console.log("  FAILED:", r); continue; }
-  console.log(`  scale ${r.scale.toFixed(2)} px/dot, paper evenness ${r.paperEvenness.toFixed(2)}, paper rms ${r.paperRms.toFixed(3)}, black ${r.black.toFixed(2)}`);
+  console.log(`  ${r.marks ? "with marks" : "no marks"}, scale ${r.scale.toFixed(2)} px/dot, paper evenness ${r.paperEvenness.toFixed(2)}, paper rms ${r.paperRms.toFixed(3)}, black ${r.black.toFixed(2)}`);
   r.measured.forEach((row, i) => console.log("  " + M.GREY_TEST_MODES[i].mode.padEnd(10), fmt(row)));
   writeFileSync(file + ".boxes.json", JSON.stringify({ patch: r.patchBoxes, paper: r.paperBoxes }));
   strips.push({
     measured: r.measured,
+    marks: r.marks,
     curves: corrected ? M.GREY_TEST_MODES.map((m) => M.dotGainCurve(`printed:${m.mode}`, m.dither, printed)) : undefined,
   });
 }

@@ -27,21 +27,33 @@ export interface GreyRowLayout {
   x0: number;
   top: number;
   bottom: number;
+  /** Left edge and width of the solid mark left of the patches (as tall as they are); width 0 without marks */
+  markX: number;
+  markW: number;
 }
 
-/** Where the patches sit in one W x H row of the grey test */
-export const greyRowLayout = (W: number, H: number, dotsPerMm = 8): GreyRowLayout => {
+/**
+ * Where the patches sit in one W x H row of the grey test. Left of them is a solid mark: with the solid 100% patch at
+ * the other end it pins both ends of the row in a photo. `marks` false gives the strip as it was printed before the
+ * marks (app 1.1.0), which can still be read.
+ */
+export const greyRowLayout = (W: number, H: number, dotsPerMm = 8, marks = true): GreyRowLayout => {
   const margin = Math.round(dotsPerMm / 2);
   const gap = 2;
   const n = GREY_TEST_LEVELS.length;
-  const pw = Math.floor((W - 2 * margin - (n - 1) * gap) / n);
+  const markW = marks ? 2 * dotsPerMm : 0;
+  const markGap = marks ? margin : 0;
+  const pw = Math.floor((W - 2 * margin - markW - markGap - (n - 1) * gap) / n);
+  const markX = Math.round((W - markW - markGap - n * pw - (n - 1) * gap) / 2);
   return {
     n,
     gap,
     pw,
-    x0: Math.round((W - n * pw - (n - 1) * gap) / 2),
+    x0: markX + markW + markGap,
     top: Math.round(H * 0.24),
     bottom: Math.round(H * 0.8),
+    markX,
+    markW,
   };
 };
 
@@ -73,6 +85,8 @@ export type StripFailure =
 export interface StripReading {
   /** Per row (GREY_TEST_MODES order), darkness of the 10..90% patches: 0 = paper, 1 = that row's solid patch */
   measured: number[][];
+  /** Whether the strip has the marks left of the patches (see greyRowLayout); the fit has to know */
+  marks: boolean;
   /** Photo pixels per printer dot */
   scale: number;
   /** How uneven the light is: darkest / brightest paper sample */
@@ -200,40 +214,25 @@ const leastSquares = (X: number[][], y: number[]): number[] => {
   return A.map((r, i) => (Math.abs(r[i]) < 1e-12 ? 0 : r[k] / r[i]));
 };
 
-/**
- * Reads the strip with the solid patches at `anchors`, first row first. Each row gets its own direction and scale
- * from the anchors next to it, since the paper curls. Returns undefined when it doesn't look like the strip this
- * way round.
- */
-const readColumn = (
+type Mapper = (row: number, sx: number, sy: number) => Pt;
+
+/** Measures the strip given where its points are in the photo; undefined when it doesn't look like the strip */
+const measureRows = (
   L: Float32Array,
   w: number,
   h: number,
-  anchors: Blob[],
+  rows: number,
   W: number,
   rowH: number,
+  lay: GreyRowLayout,
+  toPhoto: Mapper,
+  scaleOf: (row: number) => number,
 ): StripReading | undefined => {
-  const lay = greyRowLayout(W, rowH);
-  const rows = anchors.length;
   const centerX = (i: number) => lay.x0 + i * (lay.pw + lay.gap) + lay.pw / 2;
   const centerY = (lay.top + lay.bottom) / 2;
-
-  // Row axes in photo pixels per dot: v down the strip, u along the row (to the right when v points down)
-  const axes = anchors.map((_, r) => {
-    const a = anchors[Math.max(0, r - 1)], b = anchors[Math.min(rows - 1, r + 1)];
-    const steps = (Math.min(rows - 1, r + 1) - Math.max(0, r - 1)) * rowH;
-    const v: Pt = [(b.x - a.x) / steps, (b.y - a.y) / steps];
-    return { v, u: [v[1], -v[0]] as Pt };
-  });
-  const toPhoto = (row: number, sx: number, sy: number): Pt => {
-    const { u, v } = axes[row];
-    const dx = sx - centerX(lay.n - 1), dy = sy - centerY;
-    return [anchors[row].x + dx * u[0] + dy * v[0], anchors[row].y + dx * u[1] + dy * v[1]];
-  };
   /** Mean brightness of a box around a strip point (half sizes in dots), or undefined when it leaves the photo */
   const boxMean = (row: number, sx: number, sy: number, hw: number, hh: number): number | undefined => {
-    const s = Math.hypot(...axes[row].v);
-    const step = 1 / Math.max(1, s);
+    const step = 1 / Math.max(1, scaleOf(row));
     let sum = 0, n = 0;
     for (let dy = -hh; dy <= hh; dy += step) {
       for (let dx = -hw; dx <= hw; dx += step) {
@@ -307,15 +306,148 @@ const readColumn = (
     measured.push(dark);
   }
 
+  let scale = 0;
+  for (let row = 0; row < rows; row++) scale += scaleOf(row) / rows;
   return {
     measured,
-    scale: axes.reduce((s, a) => s + Math.hypot(...a.v), 0) / rows,
+    marks: lay.markW > 0,
+    scale,
     paperEvenness: Math.min(...Y) / Math.max(...Y),
     paperRms,
     black: blackSum / rows,
     patchBoxes,
     paperBoxes,
   };
+};
+
+/** Direction and size of one dot down the strip at each of a column of points a row apart, photo pixels */
+const downVectors = (pts: Pt[], rowH: number): Pt[] =>
+  pts.map((_, r) => {
+    const i = Math.max(0, r - 1), j = Math.min(pts.length - 1, r + 1);
+    return [(pts[j][0] - pts[i][0]) / ((j - i) * rowH), (pts[j][1] - pts[i][1]) / ((j - i) * rowH)];
+  });
+
+/**
+ * Reads the strip with the solid patches at `anchors`, first row first. Returns undefined when it doesn't look like
+ * the strip this way round.
+ *
+ * The solid patches give the right end of every row and, from one row to the next, the direction and scale down the
+ * strip. With only that, a row is assumed to run square to the column at the same scale, which a tilted phone or
+ * curled paper breaks towards the left end. So the marks left of the patches are looked for where that guess puts
+ * them; when every row has one, each row runs from its mark to its solid patch instead.
+ */
+const readColumn = (
+  L: Float32Array,
+  w: number,
+  h: number,
+  anchors: Blob[],
+  W: number,
+  rowH: number,
+  darkBelow: number,
+): StripReading | undefined => {
+  const rows = anchors.length;
+  const right: Pt[] = anchors.map((a) => [a.x, a.y]);
+  const vRight = downVectors(right, rowH);
+
+  /** Rows square to the column of solid patches, for a layout */
+  const square = (lay: GreyRowLayout): Mapper => {
+    const ax = lay.x0 + (lay.n - 1) * (lay.pw + lay.gap) + lay.pw / 2, ay = (lay.top + lay.bottom) / 2;
+    return (row, sx, sy) => {
+      const v = vRight[row];
+      return [right[row][0] + (sx - ax) * v[1] + (sy - ay) * v[0], right[row][1] - (sx - ax) * v[0] + (sy - ay) * v[1]];
+    };
+  };
+  const scaleRight = (row: number) => Math.hypot(...vRight[row]);
+
+  const lay = greyRowLayout(W, rowH);
+  const guess = square(lay);
+  const markX = lay.markX + lay.markW / 2, markY = (lay.top + lay.bottom) / 2;
+  const markH = lay.bottom - lay.top;
+  /** Middle of the dark pixels in a box around a strip point (half sizes in dots), and how much of a mark they make */
+  const darkMiddle = (row: number, sx: number, sy: number, hw: number, hh: number) => {
+    const step = 1 / Math.max(1, scaleRight(row));
+    let n = 0, mx = 0, my = 0, msx = 0, msy = 0;
+    for (let dy = -hh; dy <= hh; dy += step) {
+      for (let dx = -hw; dx <= hw; dx += step) {
+        const [x, y] = guess(row, sx + dx, sy + dy);
+        const xi = Math.round(x), yi = Math.round(y);
+        if (xi < 0 || yi < 0 || xi >= w || yi >= h || L[yi * w + xi] >= darkBelow) continue;
+        n++, (mx += x), (my += y), (msx += sx + dx), (msy += sy + dy);
+      }
+    }
+    return { photo: [mx / n, my / n] as Pt, strip: [msx / n, msy / n] as Pt, part: (n * step * step) / (lay.markW * markH) };
+  };
+  /**
+   * The mark along the guessed row: a dark stretch about as long as the mark is wide, with paper on both sides. The
+   * guess can be far off at this end of the row (a tilted phone changes the scale along it), so this looks from
+   * well left of the mark to a few patches in; the table beyond the paper's edge has no paper to its left.
+   */
+  const findMark = (row: number): number | undefined => {
+    const step = 0.5, from = markX - 60, to = markX + 90;
+    const profile: number[] = [];
+    for (let sx = from; sx <= to; sx += step) {
+      let sum = 0, n = 0;
+      for (let dy = -12; dy <= 12; dy += 2) {
+        const [x, y] = guess(row, sx, markY + dy);
+        const xi = Math.round(x), yi = Math.round(y);
+        if (xi < 0 || yi < 0 || xi >= w || yi >= h) continue;
+        sum += L[yi * w + xi];
+        n++;
+      }
+      profile.push(n > 0 ? sum / n : 0);
+    }
+    const paperOver = darkBelow / 0.42 * 0.65;
+    const around = (i: number) => profile[Math.max(0, Math.min(profile.length - 1, i))];
+    for (let i = 0; i < profile.length; i++) {
+      if (profile[i] >= darkBelow) continue;
+      let j = i;
+      while (j + 1 < profile.length && profile[j + 1] < darkBelow * 1.3) j++;
+      const length = (j - i + 1) * step;
+      if (i > 0 && length > lay.markW * 0.5 && length < lay.markW * 1.8 && around(i - 8) > paperOver && around(j + 5) > paperOver) {
+        return from + ((i + j) / 2) * step;
+      }
+      i = j;
+    }
+    return undefined;
+  };
+  const left: Pt[] = [];
+  for (let row = 0; row < rows; row++) {
+    const sx = findMark(row);
+    if (sx === undefined) break;
+    // Its middle: a box just bigger than the mark, moved onto what it finds a few times (clear of the mode name
+    // above and the first patch to the right)
+    let at: Pt = [sx, markY], found;
+    for (let pass = 0; pass < 4; pass++) {
+      found = darkMiddle(row, at[0], at[1], lay.markW / 2 + 3, markH / 2 + 4);
+      if (!(found.part > 0.3)) break;
+      at = found.strip;
+    }
+    if (!found || !(found.part > 0.6)) break;
+    left.push(found.photo);
+  }
+
+  if (left.length < rows) {
+    // No marks: a strip from before them
+    return measureRows(L, w, h, rows, W, rowH, greyRowLayout(W, rowH, 8, false), square(greyRowLayout(W, rowH, 8, false)), scaleRight);
+  }
+
+  const vLeft = downVectors(left, rowH);
+  const ax = lay.x0 + (lay.n - 1) * (lay.pw + lay.gap) + lay.pw / 2;
+  // A tilted phone sees one end of the row bigger than the other, and the patches in between aren't evenly spaced
+  // in the photo then. The row pitch at both ends says by how much, so the row is laid out in perspective.
+  const pinned: Mapper = (row, sx, sy) => {
+    const l = left[row], r = right[row], vl = vLeft[row], vr = vRight[row];
+    const ratio = Math.hypot(...vl) / Math.hypot(...vr);
+    const along = (sx - markX) / (ax - markX);
+    const t = (ratio * along) / (1 + (ratio - 1) * along);
+    return [
+      l[0] + t * (r[0] - l[0]) + (sy - markY) * (vl[0] + t * (vr[0] - vl[0])),
+      l[1] + t * (r[1] - l[1]) + (sy - markY) * (vl[1] + t * (vr[1] - vl[1])),
+    ];
+  };
+  const scalePinned = (row: number) =>
+    (Math.hypot(right[row][0] - left[row][0], right[row][1] - left[row][1]) / (ax - markX) + scaleRight(row)) / 2;
+  return measureRows(L, w, h, rows, W, rowH, lay, pinned, scalePinned);
 };
 
 /**
@@ -329,14 +461,15 @@ export const readGreyStrip = (photo: Pixels, W: number, rowH: number): StripRead
   // Paper is the brightest part of the photo, even when the strip is small on a dark table (a few percent of the
   // picture); solid ink is well under half of it
   const paper = percentile(L, 0.97);
-  const columns = patchColumns(solidBlobs(L, w, h, 0.42 * paper));
+  const darkBelow = 0.42 * paper;
+  const columns = patchColumns(solidBlobs(L, w, h, darkBelow));
   if (columns.length === 0) return "not_found";
 
   // The 90% patches can be solid enough to make a column of their own, and the photo can be upside down: the
   // right column, the right way round, is the one with paper and rising greys where the layout says
   for (const column of columns.slice(0, 6)) {
     for (const anchors of [column, [...column].reverse()]) {
-      const reading = readColumn(L, w, h, anchors, W, rowH);
+      const reading = readColumn(L, w, h, anchors, W, rowH, darkBelow);
       if (reading) return reading;
     }
   }
@@ -358,9 +491,10 @@ const patchDotCounts = (
   W: number,
   rowH: number,
   dither: (i: ImageData) => ImageData,
-  curve?: Uint8ClampedArray,
+  curve: Uint8ClampedArray | undefined,
+  marks: boolean,
 ): Float64Array[] => {
-  const lay = greyRowLayout(W, rowH);
+  const lay = greyRowLayout(W, rowH, 8, marks);
   const H = lay.bottom - lay.top;
   let band = new ImageData(W, H);
   band.data.fill(255);
@@ -369,6 +503,7 @@ const patchDotCounts = (
     const x0 = lay.x0 + i * (lay.pw + lay.gap);
     for (let y = 0; y < H; y++) for (let x = x0; x < x0 + lay.pw; x++) band.data.fill(v, (y * W + x) * 4, (y * W + x) * 4 + 3);
   });
+  for (let y = 0; y < H; y++) for (let x = lay.markX; x < lay.markX + lay.markW; x++) band.data.fill(0, (y * W + x) * 4, (y * W + x) * 4 + 3);
   band = dither(curve ? applyCurve(band, curve) : band);
   const burnt = (x: number, y: number) => (x >= 0 && y >= 0 && x < W && y < H && band.data[(y * W + x) * 4] < 128 ? 1 : 0);
 
@@ -406,6 +541,8 @@ const predictRow = (counts: Float64Array[], m: DotModel): number[] => {
 export interface StripToFit {
   /** Rows in GREY_TEST_MODES order, as `readGreyStrip` gives them */
   measured: number[][];
+  /** Whether the strip has the marks left of the patches, as `readGreyStrip` says */
+  marks: boolean;
   /** The curves the strip was printed with, per row, when it was printed with dot correction */
   curves?: (Uint8ClampedArray | undefined)[];
 }
@@ -429,7 +566,7 @@ export const fitDotModel = (strips: StripToFit[], W: number, rowH: number, start
   const rows = strips.flatMap((s) =>
     s.measured.map((measured, r) => ({
       measured,
-      counts: patchDotCounts(W, rowH, GREY_TEST_MODES[r].dither, s.curves?.[r]),
+      counts: patchDotCounts(W, rowH, GREY_TEST_MODES[r].dither, s.curves?.[r], s.marks),
     })),
   );
   const points = rows.reduce((n, r) => n + r.measured.length, 0);

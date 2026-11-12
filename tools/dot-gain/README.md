@@ -40,3 +40,13 @@ tools/android-build/run.sh sh -c 'npx esbuild tools/dot-gain/entry.ts --bundle -
 
 A `+` after a file name marks a strip printed with dot correction (`PRINTED='{"base":…}'` gives the model it was
 printed with); `START` sets the model the fit starts from.
+
+The grey test now prints a solid mark left of the patches in every row, which the app's reading uses to pin both
+ends of a row (see `greyRowLayout` and `readColumn` in `grey_strip.ts`). `measure_strip.py` and `fit_strip.mjs` above
+only know the strip without marks (app 1.1.0); the app's code reads both. `synth.mjs` checks the reading on made-up
+frames of a tilted, turned and curled strip, where the right answer is known:
+
+```bash
+tools/android-build/run.sh sh -c 'npx esbuild tools/dot-gain/entry.ts --bundle --format=esm --alias:$=./src \
+  --outfile=tools/dot-gain/bundle.mjs && node tools/dot-gain/synth.mjs'
+```

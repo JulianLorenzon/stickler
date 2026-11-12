@@ -137,20 +137,23 @@ export const drawGreyLabel = (
   const { canvas, ctx } = blank(W, H);
 
   // The layout is shared with the code that reads the strip back from a photo
-  const { gap, pw, x0, top, bottom } = greyRowLayout(W, H, DOTS_PER_MM);
+  const { gap, pw, x0, top, bottom, markX, markW } = greyRowLayout(W, H, DOTS_PER_MM);
 
   GREY_TEST_LEVELS.forEach((level, i) => {
     const v = Math.round(255 * (1 - level / 100));
     ctx.fillStyle = `rgb(${v},${v},${v})`;
     ctx.fillRect(x0 + i * (pw + gap), top, pw, bottom - top);
   });
+  // The solid mark that, with the 100% patch, pins both ends of the row when the strip is read from a photo
+  ctx.fillStyle = "black";
+  ctx.fillRect(markX, top, markW, bottom - top);
   const patches = ctx.getImageData(0, top, W, bottom - top);
   ctx.putImageData(mode.dither(curve ? applyCurve(patches, curve) : patches), 0, top);
 
   ctx.fillStyle = "black";
   ctx.textBaseline = "middle";
   ctx.font = `bold ${Math.round(H * 0.16)}px ${OBJECT_DEFAULTS_TEXT.fontFamily}`;
-  ctx.fillText(curve ? `${mode.name} · corrected` : mode.name, x0, top / 2);
+  ctx.fillText(curve ? `${mode.name} · corrected` : mode.name, markX, top / 2);
   ctx.textAlign = "center";
   ctx.font = `${Math.round(H * 0.13)}px ${OBJECT_DEFAULTS_TEXT.fontFamily}`;
   GREY_TEST_LEVELS.forEach((level, i) => ctx.fillText(`${level}`, x0 + i * (pw + gap) + pw / 2, (bottom + H) / 2));

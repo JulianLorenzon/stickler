@@ -2,8 +2,8 @@
   import { onDestroy, onMount } from "svelte";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr } from "$/utils/i18n";
-  import { readGreyStrip, type Quad, type StripReading } from "$/utils/grey_strip";
-  import type { StripCapture } from "$/utils/strip_camera";
+  import { readGreyStrip, type StripReading } from "$/utils/grey_strip";
+  import { stripOverlay, strokeQuads, type StripCapture } from "$/utils/strip_camera";
 
   type Props = {
     /** Width and row height of the printed strip, dots */
@@ -23,13 +23,18 @@
   /** Frames are read at up to this many pixels on the long side: full HD as it comes */
   const SIDE = 1920;
   /**
-   * Frame pixels per printer dot below which the strip is too small in the picture to trust. At 0.8 the print is a
-   * third of the frame's width, so no phone has to focus closer than it can; the greys read the same down to there
-   * (tools/dot-gain: a photo shrunk to 0.8 px per dot stays within 0.01).
+   * Frame pixels per printer dot below which the strip is too small in the picture. The greys read the same down to
+   * 0.8 (tools/dot-gain), but the boxes sit more surely with a little more; at 1 the print is over a third of the
+   * frame's width.
    */
-  const MIN_SCALE = 0.8;
-  /** The outline shows the print at this part of the frame's short side: a comfortable distance, not a requirement */
-  const GUIDE_WIDTH = 0.45;
+  const MIN_SCALE = 1;
+  /** The outline shows the print at this part of the frame's short side: where to hold it, not a requirement */
+  const GUIDE_WIDTH = 0.55;
+  /**
+   * Camera zoom, where the phone has it: the print fills the outline from twice as far away, where every phone
+   * focuses and the phone's shadow isn't on the paper
+   */
+  const ZOOM = 2;
   /** A frame only counts when the strip moved slower than this since the frame before (dots per second; 8 dots = 1 mm) */
   const MAX_SPEED = 100;
 
@@ -49,16 +54,6 @@
   let lastGood = 0;
   /** Where the strip was in the frame before, and when, to tell a steady hand from a moving one */
   let before: { marks: [number, number][]; at: number } | undefined;
-
-  const strokeQuads = (ctx: CanvasRenderingContext2D, quads: Quad[], colour: string) => {
-    ctx.strokeStyle = colour;
-    for (const q of quads) {
-      ctx.beginPath();
-      q.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
-      ctx.closePath();
-      ctx.stroke();
-    }
-  };
 
   /** Where to hold the print, about: its outline with the four rows of patches, in the middle of the frame */
   const drawGuide = (ctx: CanvasRenderingContext2D, w: number, h: number, counting: boolean) => {
@@ -148,15 +143,17 @@
         Math.max(...marks.map((m, i) => Math.hypot(m[0] - before!.marks[i][0], m[1] - before!.marks[i][1]))) /
           reading.scale / ((now - before.at) / 1000) < MAX_SPEED;
       before = { marks, at: now };
+      // (and a strip is the same kind in every frame)
+      if (good.length > 0 && good[0].marks !== reading.marks) good = [];
       if (steady) good.push(reading);
       lastGood = now;
       status = "hold";
       drawBoxes(boxes, reading, true, steady);
       if (good.length >= FRAMES) {
-        drawBoxes(work, reading, false);
         finish({
           measured: reading.measured.map((row, r) => row.map((_, i) => median(good.map((g) => g.measured[r][i])))),
-          overlay: work.toDataURL("image/jpeg", 0.8),
+          marks: reading.marks,
+          overlay: stripOverlay(work, reading),
           paperEvenness: median(good.map((g) => g.paperEvenness)),
         });
         return;
@@ -190,12 +187,17 @@
       return;
     }
     const track = stream.getVideoTracks()[0];
-    // Focus mode isn't in TypeScript's DOM types yet
+    // Zoom and focus mode aren't in TypeScript's DOM types yet
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const caps = (track.getCapabilities?.() ?? {}) as any;
     if (Array.isArray(caps.focusMode) && caps.focusMode.includes("continuous")) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       track.applyConstraints({ advanced: [{ focusMode: "continuous" } as any] }).catch(() => {});
+    }
+    if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+      const zoom = Math.max(caps.zoom.min, Math.min(caps.zoom.max, ZOOM));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      track.applyConstraints({ advanced: [{ zoom } as any] }).catch(() => {});
     }
     video.srcObject = stream;
     await video.play().catch(() => {});

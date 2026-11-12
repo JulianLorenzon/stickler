@@ -7,7 +7,7 @@
   import { LocalStoragePersistence } from "$/utils/persistence";
   import { fitDotModel, readGreyStrip, type DotFit } from "$/utils/grey_strip";
   import { builtInDotModel, D11S_DOT_MODEL, dotModelFor, ownDotModel, setOwnDotModel } from "$/utils/print_sim";
-  import { captureGreyStrip, stripCameraAvailable } from "$/utils/strip_camera";
+  import { captureGreyStrip, stripCameraAvailable, stripOverlay } from "$/utils/strip_camera";
   import { Toasts } from "$/utils/toasts";
   import { Utils } from "$/lib/printer";
   import {
@@ -107,8 +107,8 @@
   let photoResult = $state<{ overlay: string; fit: DotFit; uneven: boolean } | undefined>();
 
   /** Fit this printer's dot model to a measured grey test (printed without correction) and show what came of it */
-  const showFit = (measured: number[][], overlay: string, paperEvenness: number) => {
-    const fit = fitDotModel([{ measured }], testLabel().width, GREY_ROW, builtInDotModel(printer) ?? D11S_DOT_MODEL);
+  const showFit = (measured: number[][], marks: boolean, overlay: string, paperEvenness: number) => {
+    const fit = fitDotModel([{ measured, marks }], testLabel().width, GREY_ROW, builtInDotModel(printer) ?? D11S_DOT_MODEL);
     photoResult = { overlay, fit, uneven: paperEvenness < 0.75 };
   };
 
@@ -118,7 +118,7 @@
     photoResult = undefined;
     try {
       const capture = await captureGreyStrip(testLabel().width, GREY_ROW);
-      if (capture) showFit(capture.measured, capture.overlay, capture.paperEvenness);
+      if (capture) showFit(capture.measured, capture.marks, capture.overlay, capture.paperEvenness);
     } catch (e) {
       console.error(e);
       photoMessage = $tr((e as Error)?.name === "NotAllowedError" ? "editor.scan.no_permission" : "editor.scan.no_camera");
@@ -146,17 +146,7 @@
         photoMessage = $tr("calibration.auto.not_found");
         return;
       }
-      ctx.lineWidth = Math.max(2, canvas.width / 400);
-      for (const [boxes, colour] of [[reading.paperBoxes, "#2a9df4"], [reading.patchBoxes, "#e53935"]] as const) {
-        ctx.strokeStyle = colour;
-        for (const q of boxes) {
-          ctx.beginPath();
-          q.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
-          ctx.closePath();
-          ctx.stroke();
-        }
-      }
-      showFit(reading.measured, canvas.toDataURL("image/jpeg", 0.8), reading.paperEvenness);
+      showFit(reading.measured, reading.marks, stripOverlay(canvas, reading), reading.paperEvenness);
     } catch (e) {
       console.error(e);
       photoMessage = $tr("calibration.auto.failed");
