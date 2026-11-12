@@ -1,0 +1,270 @@
+<script lang="ts">
+  import { onDestroy, onMount } from "svelte";
+  import MdIcon from "$/components/basic/MdIcon.svelte";
+  import { tr } from "$/utils/i18n";
+  import { readGreyStrip, type Quad, type StripReading } from "$/utils/grey_strip";
+  import type { StripCapture } from "$/utils/strip_camera";
+
+  type Props = {
+    /** Width and row height of the printed strip, dots */
+    width: number;
+    rowHeight: number;
+    /** Called once: the strip as read, undefined if the user closed the camera, or the error if the camera failed */
+    onDone: (result: StripCapture | undefined, error?: unknown) => void;
+  };
+
+  let { width, rowHeight, onDone }: Props = $props();
+
+  /**
+   * Our own camera instead of the phone's camera app: video frames come without HDR, sharpening or scene modes, which
+   * shift greys, and several frames can be put together. The resolution is plenty: the patches are averaged anyway.
+   */
+  const FRAMES = 8;
+  /** Frames are scaled down to this many pixels on the long side before reading */
+  const SIDE = 960;
+  /** Photo pixels per printer dot below which the strip is too small in the picture to trust */
+  const MIN_SCALE = 1.2;
+
+  let video: HTMLVideoElement;
+  let boxes: HTMLCanvasElement;
+  let stream: MediaStream | undefined;
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  let playing = $state(false);
+  let status = $state<"starting" | "search" | "closer" | "hold">("starting");
+  let count = $state(0);
+
+  const work = document.createElement("canvas");
+  const wctx = work.getContext("2d", { willReadFrequently: true })!;
+  let good: StripReading[] = [];
+  let lastGood = 0;
+
+  const strokeQuads = (ctx: CanvasRenderingContext2D, quads: Quad[], colour: string) => {
+    ctx.strokeStyle = colour;
+    for (const q of quads) {
+      ctx.beginPath();
+      q.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+      ctx.closePath();
+      ctx.stroke();
+    }
+  };
+
+  const drawBoxes = (canvas: HTMLCanvasElement, reading: StripReading | undefined, clear: boolean) => {
+    if (clear) {
+      canvas.width = work.width;
+      canvas.height = work.height;
+    }
+    if (!reading) return;
+    const ctx = canvas.getContext("2d")!;
+    ctx.lineWidth = Math.max(2, canvas.width / 400);
+    strokeQuads(ctx, reading.paperBoxes, "#2a9df4");
+    strokeQuads(ctx, reading.patchBoxes, "#e53935");
+  };
+
+  const median = (values: number[]) => {
+    const s = [...values].sort((a, b) => a - b);
+    return s.length % 2 ? s[s.length >> 1] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+  };
+
+  const stop = () => {
+    stopped = true;
+    clearTimeout(timer);
+    stream?.getTracks().forEach((t) => t.stop());
+  };
+
+  let finished = false;
+  const finish = (result?: StripCapture, error?: unknown) => {
+    if (finished) return;
+    finished = true;
+    stop();
+    onDone(result, error);
+  };
+
+  /** Read the current frame; enough good ones in a row make the result */
+  const analyse = () => {
+    if (stopped) return;
+    if (video.readyState < 2 || video.videoWidth === 0) {
+      timer = setTimeout(analyse, 100);
+      return;
+    }
+    const scale = Math.min(1, SIDE / Math.max(video.videoWidth, video.videoHeight));
+    work.width = Math.round(video.videoWidth * scale);
+    work.height = Math.round(video.videoHeight * scale);
+    wctx.drawImage(video, 0, 0, work.width, work.height);
+    const reading = readGreyStrip(wctx.getImageData(0, 0, work.width, work.height), width, rowHeight);
+    const now = performance.now();
+
+    if (typeof reading === "string") {
+      // A missed frame or two (focus hunting, a shaky hand) doesn't throw away what's collected
+      if (now - lastGood > 1500) good = [];
+      status = good.length > 0 ? "hold" : "search";
+      drawBoxes(boxes, undefined, true);
+    } else if (reading.scale < MIN_SCALE) {
+      good = [];
+      status = "closer";
+      drawBoxes(boxes, reading, true);
+    } else {
+      good.push(reading);
+      lastGood = now;
+      status = "hold";
+      drawBoxes(boxes, reading, true);
+      if (good.length >= FRAMES) {
+        drawBoxes(work, reading, false);
+        finish({
+          measured: reading.measured.map((row, r) => row.map((_, i) => median(good.map((g) => g.measured[r][i])))),
+          overlay: work.toDataURL("image/jpeg", 0.8),
+          paperEvenness: median(good.map((g) => g.paperEvenness)),
+        });
+        return;
+      }
+    }
+    count = good.length;
+    timer = setTimeout(analyse, 60);
+  };
+
+  // The Android back button closes the camera (index.ts sends "app:back" when no modal or menu is open)
+  const onBack = (e: Event) => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    finish();
+  };
+
+  onMount(async () => {
+    window.addEventListener("app:back", onBack, { capture: true });
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+    } catch (e) {
+      finish(undefined, e);
+      return;
+    }
+    if (stopped) {
+      // Closed while the permission prompt was up
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    const track = stream.getVideoTracks()[0];
+    // Focus mode isn't in TypeScript's DOM types yet
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const caps = (track.getCapabilities?.() ?? {}) as any;
+    if (Array.isArray(caps.focusMode) && caps.focusMode.includes("continuous")) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      track.applyConstraints({ advanced: [{ focusMode: "continuous" } as any] }).catch(() => {});
+    }
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    status = "search";
+    analyse();
+  });
+
+  onDestroy(() => {
+    window.removeEventListener("app:back", onBack, { capture: true });
+    stop();
+  });
+</script>
+
+<div class="camera" role="dialog" aria-modal="true" aria-label={$tr("calibration.auto.camera")}>
+  <!-- Hidden until frames arrive: before that the Android WebView draws a grey box with a play button. The
+       transparent 1×1 poster replaces that box in case it's painted anyway -->
+  <!-- svelte-ignore a11y_media_has_caption -->
+  <video
+    bind:this={video}
+    class:playing
+    playsinline
+    muted
+    poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+    onplaying={() => (playing = true)}></video>
+  <!-- The boxes being measured, over the whole frame (both are fitted into the screen the same way) -->
+  <canvas bind:this={boxes}></canvas>
+
+  <div class="top">
+    <button class="round" onclick={() => finish()} aria-label={$tr("editor.scan.close")}>
+      <MdIcon icon="close" />
+    </button>
+  </div>
+
+  <div class="bottom">
+    <div class="status">
+      {#if status === "starting"}
+        {$tr("editor.scan.starting")}
+      {:else if status === "closer"}
+        {$tr("calibration.auto.cam.closer")}
+      {:else if status === "hold"}
+        {$tr("calibration.auto.cam.hold")} {count}/{FRAMES}
+      {:else}
+        {$tr("calibration.auto.cam.hint")}
+      {/if}
+    </div>
+  </div>
+</div>
+
+<style>
+  .camera {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    background: #000;
+    color: #fff;
+  }
+
+  video,
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  video {
+    visibility: hidden;
+  }
+
+  video.playing {
+    visibility: visible;
+  }
+
+  canvas {
+    pointer-events: none;
+  }
+
+  .top {
+    position: absolute;
+    top: calc(env(safe-area-inset-top) + 12px);
+    left: 12px;
+  }
+
+  .round {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .bottom {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(env(safe-area-inset-bottom) + 24px);
+    display: flex;
+    justify-content: center;
+    padding: 0 24px;
+  }
+
+  .status {
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 15px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+</style>

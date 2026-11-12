@@ -1,7 +1,7 @@
 #!/bin/sh
 # Screenshots of the built app (dist/) in headless Chromium, in Docker. Output: tools/screenshots/out/
 # usage: tools/screenshots/run.sh '<json>'   or   tools/screenshots/run.sh /work/s/<file>.json (a file in this folder)
-# Each shot: { "name", "path"?, "viewport"?, "mobile"?, "full"?, "native"?, "init"?, "scale"?, "actions"? (click: selector, at: [x, y]) } (see shoot.mjs).
+# Each shot: { "name", "path"?, "viewport"?, "mobile"?, "full"?, "native"?, "init"?, "scale"?, "camera"? (video file played as the camera), "actions"? (click: selector, at: [x, y]) } (see shoot.mjs).
 # "native": true loads native-stub.js, a fake Android bridge, so the native BLE UI renders without a phone.
 set -e
 here=$(cd "$(dirname "$0")" && pwd); root=$(cd "$here/../.." && pwd)

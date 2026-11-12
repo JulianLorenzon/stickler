@@ -7,6 +7,7 @@
   import { LocalStoragePersistence } from "$/utils/persistence";
   import { fitDotModel, readGreyStrip, type DotFit } from "$/utils/grey_strip";
   import { builtInDotModel, D11S_DOT_MODEL, dotModelFor, ownDotModel, setOwnDotModel } from "$/utils/print_sim";
+  import { captureGreyStrip, stripCameraAvailable } from "$/utils/strip_camera";
   import { Toasts } from "$/utils/toasts";
   import { Utils } from "$/lib/printer";
   import {
@@ -105,7 +106,26 @@
   /** The photo with the measured boxes drawn in, and the model fitted to it */
   let photoResult = $state<{ overlay: string; fit: DotFit; uneven: boolean } | undefined>();
 
-  /** Measure a photo of the grey test (printed without correction) and fit this printer's dot model to it */
+  /** Fit this printer's dot model to a measured grey test (printed without correction) and show what came of it */
+  const showFit = (measured: number[][], overlay: string, paperEvenness: number) => {
+    const fit = fitDotModel([{ measured }], testLabel().width, GREY_ROW, builtInDotModel(printer) ?? D11S_DOT_MODEL);
+    photoResult = { overlay, fit, uneven: paperEvenness < 0.75 };
+  };
+
+  /** Read the grey test with our own camera screen, which measures as soon as the strip is in view */
+  const measureWithCamera = async () => {
+    photoMessage = "";
+    photoResult = undefined;
+    try {
+      const capture = await captureGreyStrip(testLabel().width, GREY_ROW);
+      if (capture) showFit(capture.measured, capture.overlay, capture.paperEvenness);
+    } catch (e) {
+      console.error(e);
+      photoMessage = $tr((e as Error)?.name === "NotAllowedError" ? "editor.scan.no_permission" : "editor.scan.no_camera");
+    }
+  };
+
+  /** The same from a photo taken earlier or with the phone's camera app */
   const measurePhoto = async (file: Blob) => {
     measuring = true;
     photoMessage = "";
@@ -121,14 +141,11 @@
       ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       bitmap.close();
 
-      const width = testLabel().width;
-      const reading = readGreyStrip(ctx.getImageData(0, 0, canvas.width, canvas.height), width, GREY_ROW);
+      const reading = readGreyStrip(ctx.getImageData(0, 0, canvas.width, canvas.height), testLabel().width, GREY_ROW);
       if (typeof reading === "string") {
         photoMessage = $tr("calibration.auto.not_found");
         return;
       }
-      const fit = fitDotModel([{ measured: reading.measured }], width, GREY_ROW, builtInDotModel(printer) ?? D11S_DOT_MODEL);
-
       ctx.lineWidth = Math.max(2, canvas.width / 400);
       for (const [boxes, colour] of [[reading.paperBoxes, "#2a9df4"], [reading.patchBoxes, "#e53935"]] as const) {
         ctx.strokeStyle = colour;
@@ -139,7 +156,7 @@
           ctx.stroke();
         }
       }
-      photoResult = { overlay: canvas.toDataURL("image/jpeg", 0.8), fit, uneven: reading.paperEvenness < 0.75 };
+      showFit(reading.measured, canvas.toDataURL("image/jpeg", 0.8), reading.paperEvenness);
     } catch (e) {
       console.error(e);
       photoMessage = $tr("calibration.auto.failed");
@@ -208,8 +225,14 @@
     <!-- Only the one-piece strip of a roll can be read from a photo (see grey_strip.ts) -->
     <div class="title mt-3">{$tr("calibration.auto.title")}</div>
     <p class="hint">{$tr("calibration.auto.help")}</p>
+    {#if stripCameraAvailable()}
+      <button class="btn btn-secondary w-100 mb-2" disabled={measuring} onclick={measureWithCamera}>
+        <MdIcon icon="photo_camera" />
+        {$tr("calibration.auto.camera")}
+      </button>
+    {/if}
     <button class="btn btn-secondary w-100" disabled={measuring} onclick={pickPhoto}>
-      <MdIcon icon="photo_camera" />
+      <MdIcon icon="image" />
       {$tr("calibration.auto.pick")}
     </button>
     {#if measuring}

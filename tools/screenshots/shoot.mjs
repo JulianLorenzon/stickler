@@ -16,7 +16,10 @@ const server = http.createServer((req, res) => {
 
 const arg = process.argv[2] ?? "[]";
 const shots = JSON.parse(fs.existsSync(arg) ? fs.readFileSync(arg, "utf8") : arg);
-const browser = await chromium.launch();
+// "camera": a .mjpeg or .y4m file that Chromium plays as the camera (one per run: the first shot that names one)
+const camera = shots.find((s) => s.camera)?.camera;
+const browser = await chromium.launch({ args: camera
+  ? ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", `--use-file-for-fake-video-capture=${camera}`] : [] });
 for (const s of shots) {
   const ctx = await browser.newContext({ viewport: s.viewport ?? { width: 393, height: 852 }, deviceScaleFactor: s.scale ?? 2,
     isMobile: s.mobile ?? true, hasTouch: s.mobile ?? true });
