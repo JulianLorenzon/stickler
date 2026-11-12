@@ -5,9 +5,9 @@
   import { DOTS_PER_MM } from "$/defaults";
   import { tr } from "$/utils/i18n";
   import { LocalStoragePersistence } from "$/utils/persistence";
-  import { fitDotModel, readGreyStrip, type DotFit } from "$/utils/grey_strip";
+  import { fitDotModel, GREY_TEST_MODES, readGreyStrip, type DotFit } from "$/utils/grey_strip";
   import { builtInDotModel, D11S_DOT_MODEL, dotModelFor, ownDotModel, setOwnDotModel } from "$/utils/print_sim";
-  import { captureGreyStrip, stripCameraAvailable, stripOverlay } from "$/utils/strip_camera";
+  import { captureGreyStrip, rowPicture, stackPictures, stripCameraAvailable } from "$/utils/strip_camera";
   import { Toasts } from "$/utils/toasts";
   import { Utils } from "$/lib/printer";
   import {
@@ -99,16 +99,31 @@
   };
 
   /** Photos are scaled down to this many pixels on the long side before measuring; the patches are averaged anyway */
-  const PHOTO_SIDE = 1600;
+  const PHOTO_SIDE = 2400;
 
   let measuring = $state(false);
   let photoMessage = $state("");
   /** The photo with the measured boxes drawn in, and the model fitted to it */
   let photoResult = $state<{ overlay: string; fit: DotFit; uneven: boolean } | undefined>();
 
+  /**
+   * The rows of the grey test as it prints now: the label that's open in the designer (labels with gaps, a row on
+   * each), or the roll's width and row height. The printer can't say what's loaded, so this is what a photo is
+   * read as too.
+   */
+  const rowSize = () => {
+    const label = testLabel();
+    return { width: label.width, height: gaps ? label.height : GREY_ROW };
+  };
+  const paperText = $derived.by(() => {
+    const { width, height } = rowSize();
+    return `${Number((width / DOTS_PER_MM).toFixed(1))} × ${Number((height / DOTS_PER_MM).toFixed(1))} mm`;
+  });
+
   /** Fit this printer's dot model to a measured grey test (printed without correction) and show what came of it */
   const showFit = (measured: number[][], marks: boolean, overlay: string, paperEvenness: number) => {
-    const fit = fitDotModel([{ measured, marks }], testLabel().width, GREY_ROW, builtInDotModel(printer) ?? D11S_DOT_MODEL);
+    const { width, height } = rowSize();
+    const fit = fitDotModel([{ measured, marks }], width, height, builtInDotModel(printer) ?? D11S_DOT_MODEL);
     photoResult = { overlay, fit, uneven: paperEvenness < 0.75 };
   };
 
@@ -117,7 +132,8 @@
     photoMessage = "";
     photoResult = undefined;
     try {
-      const capture = await captureGreyStrip(testLabel().width, GREY_ROW);
+      const { width, height } = rowSize();
+      const capture = await captureGreyStrip(width, height, gaps ? 1 : GREY_TEST_MODES.length);
       if (capture) showFit(capture.measured, capture.marks, capture.overlay, capture.paperEvenness);
     } catch (e) {
       console.error(e);
@@ -141,12 +157,18 @@
       ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       bitmap.close();
 
-      const reading = readGreyStrip(ctx.getImageData(0, 0, canvas.width, canvas.height), testLabel().width, GREY_ROW);
+      const { width, height } = rowSize();
+      const reading = readGreyStrip(ctx.getImageData(0, 0, canvas.width, canvas.height), width, height);
       if (typeof reading === "string") {
         photoMessage = $tr("calibration.auto.not_found");
         return;
       }
-      showFit(reading.measured, reading.marks, stripOverlay(canvas, reading), reading.paperEvenness);
+      if (reading.corrected || !reading.complete) {
+        photoMessage = $tr(reading.corrected ? "calibration.auto.corrected" : "calibration.auto.partial");
+        return;
+      }
+      const overlay = stackPictures(reading.rows.map((row) => rowPicture(canvas, row, width, height)));
+      showFit(reading.measured, reading.marks, overlay, reading.paperEvenness);
     } catch (e) {
       console.error(e);
       photoMessage = $tr("calibration.auto.failed");
@@ -211,46 +233,46 @@
     {$tr("preview.grey.print")}
   </button>
 
-  {#if !gaps}
-    <!-- Only the one-piece strip of a roll can be read from a photo (see grey_strip.ts) -->
-    <div class="title mt-3">{$tr("calibration.auto.title")}</div>
-    <p class="hint">{$tr("calibration.auto.help")}</p>
-    {#if stripCameraAvailable()}
-      <button class="btn btn-secondary w-100 mb-2" disabled={measuring} onclick={measureWithCamera}>
-        <MdIcon icon="photo_camera" />
-        {$tr("calibration.auto.camera")}
-      </button>
-    {/if}
-    <button class="btn btn-secondary w-100" disabled={measuring} onclick={pickPhoto}>
-      <MdIcon icon="image" />
-      {$tr("calibration.auto.pick")}
+  <div class="title mt-3">{$tr("calibration.auto.title")}</div>
+  <p class="hint">
+    {$tr(gaps ? "calibration.auto.help.labels" : "calibration.auto.help")}
+    <br />{$tr("calibration.auto.paper")} <strong>{paperText}</strong>
+  </p>
+  {#if stripCameraAvailable()}
+    <button class="btn btn-secondary w-100 mb-2" disabled={measuring} onclick={measureWithCamera}>
+      <MdIcon icon="photo_camera" />
+      {$tr("calibration.auto.camera")}
     </button>
-    {#if measuring}
-      <p class="hint mt-2 mb-0"><span class="spinner-border spinner-border-sm"></span> {$tr("calibration.auto.reading")}</p>
-    {/if}
-    {#if photoMessage}
-      <p class="hint mt-2 mb-0">{photoMessage}</p>
-    {/if}
-    {#if photoResult}
-      <img class="overlay mt-2" src={photoResult.overlay} alt="" />
-      <p class="hint mt-2">
-        {$tr("calibration.auto.error")}
-        <strong>{photoResult.fit.rms.toFixed(3)}</strong>
-        {#if photoResult.uneven}<br />{$tr("calibration.auto.uneven")}{/if}
-        {#if photoResult.fit.rms > 0.07}<br />{$tr("calibration.auto.poor")}{/if}
-      </p>
-      <button class="btn btn-primary w-100" onclick={useMeasured}>
-        <MdIcon icon="check" />
-        {$tr("calibration.auto.use")}
-      </button>
-    {/if}
-    {#if hasOwnModel}
-      <p class="hint mt-2">{$tr("calibration.auto.own")}</p>
-      <button class="btn btn-secondary w-100" onclick={dropMeasured}>
-        <MdIcon icon="restart_alt" />
-        {$tr("calibration.auto.reset")}
-      </button>
-    {/if}
+  {/if}
+  <button class="btn btn-secondary w-100" disabled={measuring} onclick={pickPhoto}>
+    <MdIcon icon="image" />
+    {$tr("calibration.auto.pick")}
+  </button>
+  {#if measuring}
+    <p class="hint mt-2 mb-0"><span class="spinner-border spinner-border-sm"></span> {$tr("calibration.auto.reading")}</p>
+  {/if}
+  {#if photoMessage}
+    <p class="hint mt-2 mb-0">{photoMessage}</p>
+  {/if}
+  {#if photoResult}
+    <img class="overlay mt-2" src={photoResult.overlay} alt="" />
+    <p class="hint mt-2">
+      {$tr("calibration.auto.error")}
+      <strong>{photoResult.fit.rms.toFixed(3)}</strong>
+      {#if photoResult.uneven}<br />{$tr("calibration.auto.uneven")}{/if}
+      {#if photoResult.fit.rms > 0.07}<br />{$tr("calibration.auto.poor")}{/if}
+    </p>
+    <button class="btn btn-primary w-100" onclick={useMeasured}>
+      <MdIcon icon="check" />
+      {$tr("calibration.auto.use")}
+    </button>
+  {/if}
+  {#if hasOwnModel}
+    <p class="hint mt-2">{$tr("calibration.auto.own")}</p>
+    <button class="btn btn-secondary w-100" onclick={dropMeasured}>
+      <MdIcon icon="restart_alt" />
+      {$tr("calibration.auto.reset")}
+    </button>
   {/if}
 
   {#if gaps}

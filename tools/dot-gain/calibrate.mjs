@@ -1,7 +1,7 @@
 // The app's own strip reading and dot model fit (src/utils/grey_strip.ts) on photos, outside the app.
 // usage: node calibrate.mjs <photo.rgba>[+] ...   ("+" after a file: that strip was printed with dot correction,
 //        using the app's MXW01 model unless PRINTED='{"base":...}' says otherwise). Raw files come from to_raw.py.
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 globalThis.ImageData = class { constructor(a, b, c) { if (typeof a === "number") { this.width = a; this.height = b; this.data = new Uint8ClampedArray(a * b * 4); } else { this.data = a; this.width = b; this.height = c; } } };
 const M = await import("./bundle.mjs");
 const W = 384, ROW = 112;
@@ -18,9 +18,9 @@ for (const arg of process.argv.slice(2)) {
   const ms = performance.now() - t0;
   console.log(`\n${arg}  ${photo.width}x${photo.height}  read in ${ms.toFixed(0)} ms`);
   if (typeof r === "string") { console.log("  FAILED:", r); continue; }
-  console.log(`  ${r.marks ? "with marks" : "no marks"}, scale ${r.scale.toFixed(2)} px/dot, paper evenness ${r.paperEvenness.toFixed(2)}, paper rms ${r.paperRms.toFixed(3)}, black ${r.black.toFixed(2)}`);
-  r.measured.forEach((row, i) => console.log("  " + M.GREY_TEST_MODES[i].mode.padEnd(10), fmt(row)));
-  writeFileSync(file + ".boxes.json", JSON.stringify({ patch: r.patchBoxes, paper: r.paperBoxes }));
+  console.log(`  ${r.marks ? "coded rows" : "no marks"}, ${r.rows.length} row(s), scale ${r.scale.toFixed(2)} px/dot, paper evenness ${r.paperEvenness.toFixed(2)}`);
+  r.rows.forEach((row) => console.log("  " + M.GREY_TEST_MODES[row.mode].mode.padEnd(10), fmt(row.measured)));
+  if (!r.complete) continue;
   strips.push({
     measured: r.measured,
     marks: r.marks,

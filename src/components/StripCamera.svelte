@@ -2,40 +2,44 @@
   import { onDestroy, onMount } from "svelte";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr } from "$/utils/i18n";
-  import { readGreyStrip, type StripReading } from "$/utils/grey_strip";
-  import { stripOverlay, strokeQuads, type StripCapture } from "$/utils/strip_camera";
+  import { GREY_TEST_MODES, readGreyStrip, type RowReading, type StripReading } from "$/utils/grey_strip";
+  import { rowPicture, stackPictures, strokeQuads, type StripCapture } from "$/utils/strip_camera";
 
   type Props = {
-    /** Width and row height of the printed strip, dots */
+    /** Width and height of a printed row, dots */
     width: number;
     rowHeight: number;
-    /** Called once: the strip as read, undefined if the user closed the camera, or the error if the camera failed */
+    /** Rows in one piece: all of them on a roll, 1 when every row is a label of its own */
+    together: number;
+    /** Called once: the test as read, undefined if the user closed the camera, or the error if the camera failed */
     onDone: (result: StripCapture | undefined, error?: unknown) => void;
   };
 
-  let { width, rowHeight, onDone }: Props = $props();
+  let { width, rowHeight, together, onDone }: Props = $props();
 
   /**
    * Our own camera instead of the phone's camera app: video frames come without HDR, sharpening or scene modes, which
    * shift greys, and several frames can be put together. The resolution is plenty: the patches are averaged anyway.
+   * Rows are read as they come into view, in any order and any way up, so labels can be shown one after another.
    */
+  const MODES = GREY_TEST_MODES.length;
+  /** Steady frames wanted of every row */
   const FRAMES = 16;
   /** Frames are read at up to this many pixels on the long side: full HD as it comes */
   const SIDE = 1920;
   /**
-   * Frame pixels per printer dot below which the strip is too small in the picture. The greys read the same down to
-   * 0.8 (tools/dot-gain), but the boxes sit more surely with a little more; at 1 the print is over a third of the
-   * frame's width.
+   * Frame pixels per printer dot below which a row is too small in the picture. The greys read the same down to
+   * 0.8 (tools/dot-gain), but the boxes sit more surely with a little more.
    */
   const MIN_SCALE = 1;
   /** The outline shows the print at this part of the frame's short side: where to hold it, not a requirement */
-  const GUIDE_WIDTH = 0.55;
+  const guideWidth = () => (together > 1 ? 0.55 : 0.8);
   /**
    * Camera zoom, where the phone has it: the print fills the outline from twice as far away, where every phone
    * focuses and the phone's shadow isn't on the paper
    */
   const ZOOM = 2;
-  /** A frame only counts when the strip moved slower than this since the frame before (dots per second; 8 dots = 1 mm) */
+  /** A frame only counts when the row moved slower than this since the frame before (dots per second; 8 dots = 1 mm) */
   const MAX_SPEED = 100;
 
   let video: HTMLVideoElement;
@@ -45,21 +49,22 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   let playing = $state(false);
-  let status = $state<"starting" | "search" | "closer" | "hold">("starting");
-  let count = $state(0);
+  let status = $state<"starting" | "search" | "closer" | "hold" | "next" | "corrected">("starting");
+  /** Steady frames collected of every row */
+  let counts = $state<number[]>(Array(MODES).fill(0));
 
   const work = document.createElement("canvas");
   const wctx = work.getContext("2d", { willReadFrequently: true })!;
-  let good: StripReading[] = [];
-  let lastGood = 0;
-  /** Where the strip was in the frame before, and when, to tell a steady hand from a moving one */
-  let before: { marks: [number, number][]; at: number } | undefined;
+  /** Per row: the readings collected, its picture from the last of them, and where it was in the frame before */
+  let good: RowReading[][] = Array.from({ length: MODES }, () => []);
+  const pictures: (HTMLCanvasElement | undefined)[] = Array(MODES).fill(undefined);
+  const before: ({ at: [number, number]; time: number } | undefined)[] = Array(MODES).fill(undefined);
+  let marks: boolean | undefined;
 
-  /** Where to hold the print, about: its outline with the four rows of patches, in the middle of the frame */
+  /** Where to hold the print, about: the outline of a piece with its rows of patches, in the middle of the frame */
   const drawGuide = (ctx: CanvasRenderingContext2D, w: number, h: number, counting: boolean) => {
-    const rows = 4;
-    const gw = GUIDE_WIDTH * Math.min(w, h);
-    const gh = (gw * rows * rowHeight) / width;
+    const gw = guideWidth() * Math.min(w, h);
+    const gh = (gw * together * rowHeight) / width;
     const x = (w - gw) / 2, y = (h - gh) / 2;
     ctx.lineWidth = Math.max(2, w / 300);
     ctx.strokeStyle = counting ? "#4cd964" : "rgba(255, 255, 255, 0.85)";
@@ -68,27 +73,20 @@
     ctx.setLineDash([]);
     if (counting) return;
     ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
-    for (let r = 0; r < rows; r++) ctx.fillRect(x + gw * 0.02, y + (gh / rows) * (r + 0.24), gw * 0.96, (gh / rows) * 0.56);
+    for (let r = 0; r < together; r++) ctx.fillRect(x + gw * 0.02, y + (gh / together) * (r + 0.24), gw * 0.96, (gh / together) * 0.56);
   };
 
-  /** Middle of the first and the last row's solid patch */
-  const marksOf = (reading: StripReading): [number, number][] =>
-    [reading.patchBoxes[9], reading.patchBoxes[reading.patchBoxes.length - 1]].map((q) => [
-      (q[0][0] + q[2][0]) / 2,
-      (q[0][1] + q[2][1]) / 2,
-    ]);
-
-  const drawBoxes = (canvas: HTMLCanvasElement, reading: StripReading | undefined, live: boolean, counting = false) => {
-    const ctx = canvas.getContext("2d")!;
-    if (live) {
-      canvas.width = work.width;
-      canvas.height = work.height;
-      drawGuide(ctx, canvas.width, canvas.height, counting);
-    }
+  const drawBoxes = (reading: StripReading | undefined, counting: boolean) => {
+    const ctx = boxes.getContext("2d")!;
+    boxes.width = work.width;
+    boxes.height = work.height;
+    drawGuide(ctx, boxes.width, boxes.height, counting);
     if (!reading) return;
-    ctx.lineWidth = Math.max(2, canvas.width / 400);
-    strokeQuads(ctx, reading.paperBoxes, "#2a9df4");
-    strokeQuads(ctx, reading.patchBoxes, "#e53935");
+    ctx.lineWidth = Math.max(2, boxes.width / 400);
+    for (const row of reading.rows) {
+      strokeQuads(ctx, row.paperBoxes, "#2a9df4");
+      strokeQuads(ctx, row.patchBoxes, "#e53935");
+    }
   };
 
   const median = (values: number[]) => {
@@ -110,7 +108,7 @@
     onDone(result, error);
   };
 
-  /** Read the current frame; enough good ones in a row make the result */
+  /** Read the current frame; enough steady ones of every row make the result */
   const analyse = () => {
     if (stopped) return;
     if (video.readyState < 2 || video.videoWidth === 0) {
@@ -125,41 +123,53 @@
     const now = performance.now();
 
     if (typeof reading === "string") {
-      // A missed frame or two (focus hunting, a shaky hand) doesn't throw away what's collected
-      if (now - lastGood > 1500) good = [];
-      before = undefined;
-      status = good.length > 0 ? "hold" : "search";
-      drawBoxes(boxes, undefined, true);
-    } else if (reading.scale < MIN_SCALE) {
-      good = [];
-      before = undefined;
-      status = "closer";
-      drawBoxes(boxes, reading, true);
+      status = "search";
+      before.fill(undefined);
+      drawBoxes(undefined, false);
+    } else if (reading.corrected) {
+      // Printed with dot correction: that says how well a correction works, not what the printer does
+      status = "corrected";
+      drawBoxes(reading, false);
     } else {
-      // Blurred frames read too grey: only frames where the strip barely moved since the one before count
-      const marks = marksOf(reading);
-      const steady =
-        before !== undefined &&
-        Math.max(...marks.map((m, i) => Math.hypot(m[0] - before!.marks[i][0], m[1] - before!.marks[i][1]))) /
-          reading.scale / ((now - before.at) / 1000) < MAX_SPEED;
-      before = { marks, at: now };
-      // (and a strip is the same kind in every frame)
-      if (good.length > 0 && good[0].marks !== reading.marks) good = [];
-      if (steady) good.push(reading);
-      lastGood = now;
-      status = "hold";
-      drawBoxes(boxes, reading, true, steady);
-      if (good.length >= FRAMES) {
+      if (marks !== reading.marks) {
+        // Another kind of print than before: start over
+        good = good.map(() => []);
+        marks = reading.marks;
+      }
+      let counted = false, tooSmall = false;
+      for (const row of reading.rows) {
+        if (row.scale < MIN_SCALE) {
+          tooSmall = true;
+          continue;
+        }
+        // Blurred frames read too grey: a row only counts when it barely moved since the frame before
+        const at = row.patchBoxes[row.patchBoxes.length - 1][0];
+        const was = before[row.mode];
+        const steady = was !== undefined && Math.hypot(at[0] - was.at[0], at[1] - was.at[1]) / row.scale / ((now - was.time) / 1000) < MAX_SPEED;
+        before[row.mode] = { at, time: now };
+        if (!steady) continue;
+        counted = true;
+        if (good[row.mode].length < FRAMES) {
+          good[row.mode].push(row);
+          pictures[row.mode] = rowPicture(work, row, width, rowHeight);
+        }
+      }
+      for (let m = 0; m < MODES; m++) if (!reading.rows.some((r) => r.mode === m)) before[m] = undefined;
+      // With a label each, the ones in view can be done while others haven't been shown yet
+      const inViewDone = reading.rows.every((r) => good[r.mode].length >= FRAMES);
+      status = !counted && tooSmall ? "closer" : inViewDone && together === 1 ? "next" : "hold";
+      drawBoxes(reading, counted);
+      counts = good.map((g) => g.length);
+      if (good.every((g) => g.length >= FRAMES)) {
         finish({
-          measured: reading.measured.map((row, r) => row.map((_, i) => median(good.map((g) => g.measured[r][i])))),
+          measured: good.map((g) => g[0].measured.map((_, i) => median(g.map((r) => r.measured[i])))),
           marks: reading.marks,
-          overlay: stripOverlay(work, reading),
-          paperEvenness: median(good.map((g) => g.paperEvenness)),
+          overlay: stackPictures(pictures.filter((p) => p !== undefined)),
+          paperEvenness: median(good.flat().map((r) => r.paperEvenness)),
         });
         return;
       }
     }
-    count = good.length;
     timer = setTimeout(analyse, 60);
   };
 
@@ -237,11 +247,21 @@
         {$tr("editor.scan.starting")}
       {:else if status === "closer"}
         {$tr("calibration.auto.cam.closer")}
+      {:else if status === "corrected"}
+        {$tr("calibration.auto.corrected")}
       {:else if status === "hold"}
-        {$tr("calibration.auto.cam.hold")} {count}/{FRAMES}
+        {$tr("calibration.auto.cam.hold")}
+      {:else if status === "next" || (together === 1 && counts.some((c) => c >= FRAMES))}
+        {$tr("calibration.auto.cam.next")}
       {:else}
-        {$tr("calibration.auto.cam.hint")}
+        {$tr(together === 1 ? "calibration.auto.cam.hint.labels" : "calibration.auto.cam.hint")}
       {/if}
+    </div>
+    <!-- How far every row is: on a roll they fill together, with a label each one after another -->
+    <div class="rows" aria-hidden="true">
+      {#each counts as c, i (i)}
+        <div class="row" class:done={c >= FRAMES}><div style:width="{(100 * Math.min(c, FRAMES)) / FRAMES}%"></div></div>
+      {/each}
     </div>
   </div>
 </div>
@@ -300,8 +320,33 @@
     right: 0;
     bottom: calc(env(safe-area-inset-bottom) + 24px);
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
     padding: 0 24px;
+  }
+
+  .rows {
+    display: flex;
+    gap: 6px;
+    width: min(100%, 300px);
+  }
+
+  .row {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.3);
+    overflow: hidden;
+  }
+
+  .row > div {
+    height: 100%;
+    background: #fff;
+  }
+
+  .row.done > div {
+    background: #4cd964;
   }
 
   .status {

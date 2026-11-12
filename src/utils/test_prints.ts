@@ -7,7 +7,15 @@ import type { PrintDirection, PrinterModelMeta } from "$/lib/printer";
 import { LabelType, type PrinterClient } from "$/lib/printer";
 import type { LabelProps, PostProcessType, PrinterId, PreviewPropsOffset } from "$/types";
 import { applyCurve, atkinson, bayer, blueNoiseDither, floydSteinberg, threshold, werness } from "$/utils/post_process";
-import { GREY_TEST_LEVELS, GREY_TEST_MODES, greyRowLayout } from "$/utils/grey_strip";
+import {
+  CODE_CELL,
+  GREY_NUMBERED,
+  GREY_TEST_LEVELS,
+  GREY_TEST_MODES,
+  greyRowCode,
+  greyRowLayout,
+  greyTitleRoom,
+} from "$/utils/grey_strip";
 import { dotGainCurve, dotModelFor } from "$/utils/print_sim";
 
 export { GREY_TEST_MODES };
@@ -124,9 +132,10 @@ export const drawOffsetLabel = (W: number, H: number, xOffset: number, index: nu
 };
 
 /**
- * A row of grey patches from 10 to 100% ink, dithered without any tone change, with the mode name above and the
- * percentages below. Photographed in even light it shows how much darker each grey prints (dot gain). With a
- * curve the greys are corrected first, and the label says so.
+ * A row of grey patches from 10 to 100% ink, dithered without any tone change, with the mode name above and some of
+ * the percentages below. Photographed in even light it shows how much darker each grey prints (dot gain). With a
+ * curve the greys are corrected first, and the label says so. The mark at the left end, the cells in the corners and
+ * the blank stretches are for reading the row back from a photo (grey_strip.ts).
  */
 export const drawGreyLabel = (
   mode: (typeof GREY_TEST_MODES)[number],
@@ -137,7 +146,8 @@ export const drawGreyLabel = (
   const { canvas, ctx } = blank(W, H);
 
   // The layout is shared with the code that reads the strip back from a photo
-  const { gap, pw, x0, top, bottom, markX, markW } = greyRowLayout(W, H, DOTS_PER_MM);
+  const lay = greyRowLayout(W, H, DOTS_PER_MM);
+  const { gap, pw, x0, top, bottom, markX, markW } = lay;
 
   GREY_TEST_LEVELS.forEach((level, i) => {
     const v = Math.round(255 * (1 - level / 100));
@@ -153,10 +163,14 @@ export const drawGreyLabel = (
   ctx.fillStyle = "black";
   ctx.textBaseline = "middle";
   ctx.font = `bold ${Math.round(H * 0.16)}px ${OBJECT_DEFAULTS_TEXT.fontFamily}`;
-  ctx.fillText(curve ? `${mode.name} · corrected` : mode.name, markX, top / 2);
+  // Squeezed where the label is short: right of it the paper has to stay blank
+  ctx.fillText(curve ? `${mode.name} · corrected` : mode.name, x0, top / 2, greyTitleRoom(lay, W));
   ctx.textAlign = "center";
   ctx.font = `${Math.round(H * 0.13)}px ${OBJECT_DEFAULTS_TEXT.fontFamily}`;
-  GREY_TEST_LEVELS.forEach((level, i) => ctx.fillText(`${level}`, x0 + i * (pw + gap) + pw / 2, (bottom + H) / 2));
+  for (const i of GREY_NUMBERED) ctx.fillText(`${GREY_TEST_LEVELS[i]}`, x0 + i * (pw + gap) + pw / 2, (bottom + H) / 2, pw);
+  for (const cell of greyRowCode(lay, H, GREY_TEST_MODES.indexOf(mode), curve !== undefined)) {
+    if (cell.on) ctx.fillRect(Math.round(cell.x - CODE_CELL.w / 2), Math.round(cell.y - CODE_CELL.h / 2), CODE_CELL.w, CODE_CELL.h);
+  }
 
   // Only the text rows still have grey edges
   ctx.putImageData(threshold(ctx.getImageData(0, 0, W, top), 128), 0, 0);
