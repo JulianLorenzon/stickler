@@ -62,8 +62,10 @@ a,
     color: var(--ink-secondary);
   }
 
-  &:hover {
-    background: var(--surface-2);
+  @media (hover: hover) {
+    &:hover {
+      background: var(--surface-2);
+    }
   }
 
   &:active,
@@ -119,7 +121,13 @@ a,
     vertical-align: 0;
   }
 
-  &:hover,
+  @media (hover: hover) {
+    &:hover {
+      background: var(--surface-2);
+      color: var(--ink-primary);
+    }
+  }
+
   &:active,
   &.show {
     background: var(--surface-2);

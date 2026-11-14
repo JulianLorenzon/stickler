@@ -545,9 +545,14 @@
     border-top: 1px solid var(--border-standard);
   }
 
-  .device-row:active,
-  .device-row:hover {
+  .device-row:active {
     background: var(--surface-3);
+  }
+
+  @media (hover: hover) {
+    .device-row:hover {
+      background: var(--surface-3);
+    }
   }
 
   .device-row :global(.signal-0),

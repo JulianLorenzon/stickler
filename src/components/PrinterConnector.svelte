@@ -56,18 +56,20 @@
     transition: background-color 0.15s;
   }
 
-  .printer-chip:hover {
-    background: var(--surface-3);
+  @media (hover: hover) {
+    .printer-chip:hover {
+      background: var(--surface-3);
+    }
+
+    .printer-chip.state-disconnected:hover {
+      background: var(--accent-hover);
+    }
   }
 
   .printer-chip.state-disconnected {
     background: var(--accent);
     border-color: var(--accent);
     color: var(--accent-ink);
-  }
-
-  .printer-chip.state-disconnected:hover {
-    background: var(--accent-hover);
   }
 
   .printer-chip.state-disconnected :global(.mdi) {

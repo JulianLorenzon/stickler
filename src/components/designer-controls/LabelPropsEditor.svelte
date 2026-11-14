@@ -661,9 +661,14 @@
     color: var(--ink-tertiary);
   }
 
-  .chip-del:hover,
   .chip-del:active {
     color: var(--bs-danger);
+  }
+
+  @media (hover: hover) {
+    .chip-del:hover {
+      color: var(--bs-danger);
+    }
   }
 
   .custom-toggle {
