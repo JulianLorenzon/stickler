@@ -339,7 +339,7 @@
     "preview.density.hint": "Sent to the printer like the official app does, but the D11s prints the same at every level.",
     "preview.offset.help": "Fine-tunes where the design lands on the label; the preview above doesn't move. Values are printer dots: 8 dots = 1 mm, 1 dot = 0.125 mm. X is along the label: negative moves the design towards the front edge (red), positive away from it. The printer always starts about 1 mm after the front edge, so a negative X cuts off the start of the design instead of printing earlier. Y moves it across the label. \"Keep label size\" cuts off what moves past an edge, \"Grow image\" makes the printed image bigger instead.",
     "preview.offset.mode": "At the edges",
-    "preview.offset.calibrate_hint": "To find the right offset, print the test strip from the printer sheet, under Calibration.",
+    "preview.offset.calibrate_hint": "To find the right offset, print the offset test strip on the Calibration page (app menu, top right).",
     "params.generic.rotation": "Rotation",
     "params.generic.rotation.snap": "Rotation handle snaps to",
     "params.generic.rotation.free": "Free",

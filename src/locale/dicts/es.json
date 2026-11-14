@@ -339,7 +339,7 @@
     "preview.density.hint": "Se envía a la impresora como hace la app oficial, pero la D11s imprime igual en todos los niveles.",
     "preview.offset.help": "Ajusta con precisión dónde cae el diseño en la etiqueta; la vista previa de arriba no se mueve. Los valores son puntos de la impresora: 8 puntos = 1 mm, 1 punto = 0,125 mm. X va a lo largo de la etiqueta: negativo acerca el diseño al borde delantero (rojo), positivo lo aleja. La impresora siempre empieza a 1 mm del borde delantero, así que una X negativa corta el principio del diseño en lugar de imprimir antes. Y lo mueve a lo ancho de la etiqueta. «Mantener tamaño» corta lo que sobrepasa un borde; «Ampliar imagen» hace más grande la imagen impresa.",
     "preview.offset.mode": "En los bordes",
-    "preview.offset.calibrate_hint": "Para encontrar el desplazamiento adecuado, imprime la tira de prueba desde el menú de la impresora, en Calibración.",
+    "preview.offset.calibrate_hint": "Para encontrar el desplazamiento adecuado, imprime la tira de prueba en la página Calibración (menú de la app, arriba a la derecha).",
     "params.generic.rotation": "Giro",
     "params.generic.rotation.snap": "El tirador de giro salta cada",
     "params.generic.rotation.free": "Libre",

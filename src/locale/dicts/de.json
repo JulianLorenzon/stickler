@@ -339,7 +339,7 @@
     "preview.density.hint": "Wird wie in der offiziellen App an den Drucker geschickt, aber der D11s druckt auf jeder Stufe gleich.",
     "preview.offset.help": "Legt genau fest, wo das Design auf dem Etikett landet; die Vorschau oben bewegt sich nicht mit. Die Werte sind Druckerpunkte: 8 Punkte = 1 mm, 1 Punkt = 0,125 mm. X verläuft entlang des Etiketts: negativ schiebt das Design zur Vorderkante (rot), positiv davon weg. Der Drucker beginnt immer etwa 1 mm nach der Vorderkante, ein negatives X schneidet also den Anfang des Designs ab, statt früher zu drucken. Y verschiebt es quer über das Etikett. „Etikettengröße halten“ schneidet ab, was über einen Rand rutscht, „Bild vergrößern“ macht stattdessen das gedruckte Bild größer.",
     "preview.offset.mode": "An den Rändern",
-    "preview.offset.calibrate_hint": "Den passenden Versatz findest du mit dem Teststreifen im Druckermenü unter Kalibrierung.",
+    "preview.offset.calibrate_hint": "Den passenden Versatz findest du mit dem Teststreifen auf der Seite Kalibrierung (App-Menü, oben rechts).",
     "params.generic.rotation": "Drehung",
     "params.generic.rotation.snap": "Drehgriff rastet ein bei",
     "params.generic.rotation.free": "Frei",
