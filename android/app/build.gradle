@@ -23,12 +23,21 @@ android {
         debug {
             applicationIdSuffix ".dev"
             versionNameSuffix "-dev"
+            // Shrunk like the release, so what R8 breaks shows up in everyday testing. -Pnoshrink builds it
+            // unshrunk, for readable Android-side stack traces while hunting a bug
+            if (!project.hasProperty("noshrink")) {
+                minifyEnabled true
+                shrinkResources true
+                proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            }
         }
         release {
-            // R8 (2.6 MB instead of 9.4 MB) made the app crash on connect, cause not found yet: off until we
-            // have a stack trace from the phone
-            minifyEnabled false
-            shrinkResources false
+            // R8 shrinks the APK from 4.7 to 2.5 MB. It crashed on connect in October 2026; with today's
+            // Capacitor and plugins a shrunk test build (see debug) connected, printed on both printers,
+            // took a shared picture, exported a label and handled back (2026-11-14). The bundle carries the
+            // mapping file, so Play shows crash stack traces with the real names
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // No signingConfig: the release APK comes out unsigned and tools/sign-release.sh signs it with your
             // release key, asking for the password, so the password is never stored anywhere

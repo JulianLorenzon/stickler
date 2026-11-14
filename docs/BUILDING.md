@@ -84,7 +84,10 @@ upload key: `tools/sign-bundle.sh path/to/release.jks <key alias>` (jarsigner, f
 password). The result is `android/app/build/outputs/bundle/release/stickler-<version>.aab`. For quick tries on your own phone, use a debug build (`./gradlew assembleDebug`)
 instead. A debug build and a release build can't update each other, because they're signed with different keys.
 
-R8 (code shrinking) is off: the shrunk build crashed when connecting, and the cause hasn't been found yet.
+Release builds are shrunk with R8 (code shrinking), and so are debug builds, so what shrinking breaks shows up while
+testing. `./gradlew assembleDebug -Pnoshrink` builds an unshrunk debug app, for readable stack traces on the Android
+side; R8's mapping file for a shrunk build is `app/build/outputs/mapping/debug/mapping.txt` (read traces with the SDK's
+`retrace`).
 
 ## Building in Docker
 
@@ -95,7 +98,8 @@ Docker volume `stickler-build-cache`.
 ```bash
 tools/android-build/run.sh                              # unsigned release APK and app bundle (npm ci if needed, vite, cap sync, gradle)
 tools/android-build/run.sh check                        # type check (svelte-check)
-tools/android-build/run.sh dev                          # test build "Stickler dev" next to the Play version, copied to $DEV_APK_DIR (WSL: Windows Downloads)
+tools/android-build/run.sh dev                          # test build "Stickler dev" next to the Play version, shrunk like the release
+                                                        # (dev noshrink: unshrunk), copied to $DEV_APK_DIR (WSL: Windows Downloads)
 tools/android-build/run.sh sign path/to/release.jks     # sign the APK; apksigner asks for the password
 tools/android-build/run.sh sign-bundle path/to/release.jks <alias>   # sign the app bundle; jarsigner asks for the password
 tools/android-build/run.sh sh -c 'cd android && ./gradlew assembleDebug'   # any other command

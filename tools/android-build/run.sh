@@ -4,11 +4,12 @@
 #
 #   tools/android-build/run.sh                   unsigned release APK and app bundle: npm ci (if needed), vite build,
 #                                                cap sync, gradle
-#   tools/android-build/run.sh dev               test build for the phone ("Stickler dev", installs next to the Play
-#                                                version): vite build, cap sync, assembleDebug, then copied as
-#                                                stickler-<version>-dev.apk to $DEV_APK_DIR, else to the Windows
-#                                                Downloads folder under WSL; elsewhere it stays in android/app/build
-#   tools/android-build/run.sh check             type check (svelte-check, errors only), npm ci if needed
+#   tools/android-build/run.sh dev [noshrink]    test build for the phone ("Stickler dev", installs next to the Play
+#                                                version), shrunk with R8 like the release unless noshrink: vite build,
+#                                                cap sync, assembleDebug, then copied as stickler-<version>-dev.apk to
+#                                                $DEV_APK_DIR, else to the Windows Downloads folder under WSL; elsewhere
+#                                                it stays in android/app/build. R8's mapping file (to read stack
+#                                                traces) is kept as android/app/build/dev/mapping-<commit>.txt
 #   tools/android-build/run.sh sign <keystore>   sign the APK with tools/sign-release.sh (apksigner asks for the password)
 #   tools/android-build/run.sh sign-bundle <keystore> <alias>   sign the app bundle with tools/sign-bundle.sh
 #   tools/android-build/run.sh <command...>      anything else, e.g. sh, or sh -c 'cd android && ./gradlew assembleDebug'
@@ -38,7 +39,9 @@ elif [ "$1" = check ]; then
   set -- sh -c '[ -d node_modules ] || npm ci; npx svelte-check --tsconfig ./tsconfig.json --threshold error'
 elif [ "$1" = dev ]; then
   dev=1
-  set -- sh -c '[ -d node_modules ] || npm ci; npm run build && npx cap sync android && cd android && ./gradlew -q assembleDebug'
+  shrink=""
+  [ "$2" = noshrink ] && shrink=-Pnoshrink
+  set -- sh -c "[ -d node_modules ] || npm ci; npm run build && npx cap sync android && cd android && ./gradlew -q assembleDebug $shrink"
 elif [ $# -eq 0 ]; then
   set -- sh -c '[ -d node_modules ] || npm ci; npm run build && npx cap sync android && cd android && ./gradlew assembleRelease bundleRelease'
 fi
@@ -61,6 +64,11 @@ if [ -n "$dev" ]; then
     # cmd.exe complains about a WSL path as its working directory, so it's started from C:
     home=$(cd /mnt/c && cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
     [ -n "$home" ] && dir=$(wslpath "$home")/Downloads
+  fi
+  mapping=$root/android/app/build/outputs/mapping/debug/mapping.txt
+  if [ -z "$shrink" ] && [ -f "$mapping" ]; then
+    mkdir -p "$root/android/app/build/dev"
+    cp "$mapping" "$root/android/app/build/dev/mapping-$COMMIT_HASH.txt"
   fi
   if [ -n "$dir" ] && [ -d "$dir" ]; then
     cp "$apk" "$dir/stickler-$version-dev.apk"
