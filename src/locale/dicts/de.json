@@ -157,7 +157,7 @@
     "fonts.gfonts": "Schriften finden",
     "fonts.title_override": "Anderer Name",
     "browser_warning.mobile": "Dieser Browser kann kein Bluetooth nutzen. Installiere die Android-App oder nutze Chrome zum Drucken. Gestalten geht trotzdem.",
-    "connector.autoconnect": "Beim Öffnen der App mit einem meiner Drucker verbinden",
+    "connector.autoconnect": "Von selbst mit einem meiner Drucker verbinden, wenn er eingeschaltet ist",
     "connector.connect": "Verbinden",
     "connector.details": "Druckerdetails und Werkzeuge",
     "connector.details.info": "Drucker",

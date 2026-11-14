@@ -157,7 +157,7 @@
     "fonts.gfonts": "Lettertypen zoeken",
     "fonts.title_override": "Andere naam",
     "browser_warning.mobile": "Deze browser kan geen Bluetooth gebruiken. Installeer de Android-app of gebruik Chrome om af te drukken. Ontwerpen kan wel.",
-    "connector.autoconnect": "Verbind met een van mijn printers als de app opent",
+    "connector.autoconnect": "Vanzelf verbinden met een van mijn printers als die aan staat",
     "connector.connect": "Verbinden",
     "connector.details": "Printergegevens en hulpmiddelen",
     "connector.details.info": "Printer",

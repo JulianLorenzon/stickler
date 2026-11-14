@@ -157,7 +157,7 @@
     "fonts.gfonts": "Znajdź czcionki",
     "fonts.title_override": "Inna nazwa",
     "browser_warning.mobile": "Ta przeglądarka nie może używać Bluetooth. Zainstaluj aplikację na Androida albo drukuj z Chrome. Projektować możesz i tak.",
-    "connector.autoconnect": "Łącz z jedną z moich drukarek po otwarciu aplikacji",
+    "connector.autoconnect": "Samodzielnie łącz z jedną z moich drukarek, gdy jest włączona",
     "connector.connect": "Połącz",
     "connector.details": "Szczegóły i narzędzia drukarki",
     "connector.details.info": "Drukarka",

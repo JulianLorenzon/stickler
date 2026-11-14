@@ -42,6 +42,31 @@
   const connected = $derived($connectionState === "connected");
   const connecting = $derived($connectionState === "connecting");
 
+  /**
+   * With auto-connect on and nothing connected, a known printer the scan sees gets connected without a tap: the most
+   * recently used one at once, another one if that one hasn't shown up within a moment
+   */
+  const AUTO_PICK_WAIT_MS = 1500;
+  let autoPickTimer: ReturnType<typeof setTimeout> | undefined;
+  const autoPick = (p: FoundPrinter) => {
+    if (!$autoReconnect || $connectionState !== "disconnected" || connectingId) return;
+    const order = knownByRecency($knownPrinters);
+    const rank = order.findIndex((k) => k.deviceId === p.deviceId);
+    if (rank === -1) return;
+    const pick = () => {
+      autoPickTimer = undefined;
+      if ($connectionState !== "disconnected" || connectingId) return;
+      const best = order.find((k) => found.some((f) => f.deviceId === k.deviceId));
+      if (best) connectTo(best, true);
+    };
+    if (rank === 0) {
+      clearTimeout(autoPickTimer);
+      pick();
+    } else {
+      autoPickTimer ??= setTimeout(pick, AUTO_PICK_WAIT_MS);
+    }
+  };
+
   const scan = async () => {
     found = [];
     isScanning = await startScan(
@@ -49,6 +74,7 @@
         const idx = found.findIndex((d) => d.deviceId === p.deviceId);
         if (idx === -1) {
           found = [...found, p];
+          autoPick(p);
         } else if (found[idx].rssi !== p.rssi) {
           found[idx] = p;
         }
@@ -62,10 +88,14 @@
     isScanning = false;
   };
 
-  const connectTo = async (p: FoundPrinter) => {
+  /**
+   * Connect and close the sheet, like a tap; `silent` for automatic connects, which shouldn't show an error (the
+   * printer can be gone again by then). Closing also lets "Connect & print" go on to the preview.
+   */
+  const connectTo = async (p: FoundPrinter, silent = false) => {
     await onStopScan();
     connectingId = p.deviceId;
-    const ok = await connectNative(p);
+    const ok = await connectNative(p, { silent });
     connectingId = undefined;
     if (ok) modalRef.hide();
   };
@@ -173,6 +203,7 @@
   });
 
   onDestroy(() => {
+    clearTimeout(autoPickTimer);
     stopScan();
   });
 </script>

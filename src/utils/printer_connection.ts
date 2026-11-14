@@ -10,6 +10,7 @@ import {
   knownPrinters,
   printerClient,
   printerMeta,
+  printerSheetOpen,
 } from "$/stores";
 import { Toasts } from "$/utils/toasts";
 
@@ -143,13 +144,38 @@ export const stopScan = async (): Promise<void> => {
 /** How long the app-start scan looks for known printers */
 const AUTO_CONNECT_SCAN_MS = 4000;
 
+/** An automatic connect is running; app start and coming back to the app shouldn't start a second one */
+let autoConnecting = false;
+
 /**
- * Native only: on app start, silently connect to a known printer. With one known printer, connect to it directly;
- * with several, scan briefly and take the most recently used one that is switched on. Only known addresses are used.
+ * Native only: on app start, and when the app comes back to the front (see `watchForeground`), silently connect to a
+ * known printer. With one known printer, connect to it directly; with several, scan briefly and take the most
+ * recently used one that is switched on. Only known addresses are used.
  */
 export const autoConnectOnLaunch = async (): Promise<void> => {
-  if (!Utils.getAvailableTransports().capacitorBle || get(connectionState) !== "disconnected") return;
+  if (!Utils.getAvailableTransports().capacitorBle || get(connectionState) !== "disconnected" || autoConnecting) return;
+  autoConnecting = true;
+  try {
+    await autoConnect();
+  } finally {
+    autoConnecting = false;
+  }
+};
 
+/**
+ * Try `autoConnectOnLaunch` again whenever the app comes back to the front: a printer switched on while the app was
+ * in the background, or one that switched itself off, then gets connected without opening the printer panel. Not
+ * while that panel is open, which scans and connects by itself.
+ */
+export const watchForeground = (): (() => void) => {
+  const onVisible = () => {
+    if (document.visibilityState === "visible" && !get(printerSheetOpen)) autoConnectOnLaunch();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+  return () => document.removeEventListener("visibilitychange", onVisible);
+};
+
+const autoConnect = async (): Promise<void> => {
   const auto = get(automation);
   if (auto?.autoConnect && auto.autoConnectDeviceId) {
     await connectNative({ deviceId: auto.autoConnectDeviceId, name: auto.autoConnectDeviceId }, { silent: true });

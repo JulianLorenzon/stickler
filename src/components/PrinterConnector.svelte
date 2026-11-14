@@ -11,10 +11,11 @@
   import { tr } from "$/utils/i18n";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import BatteryIndicator from "$/components/basic/BatteryIndicator.svelte";
-  import { autoConnectOnLaunch } from "$/utils/printer_connection";
+  import { autoConnectOnLaunch, watchForeground } from "$/utils/printer_connection";
 
   onMount(() => {
     autoConnectOnLaunch();
+    return watchForeground();
   });
 </script>
 

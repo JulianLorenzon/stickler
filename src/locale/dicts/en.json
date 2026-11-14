@@ -157,7 +157,7 @@
     "fonts.gfonts": "Get fonts",
     "fonts.title_override": "Override name",
     "browser_warning.mobile": "This browser can't use Bluetooth. Install the Android app or use Chrome to print. You can still design labels.",
-    "connector.autoconnect": "Connect to one of my printers when the app opens",
+    "connector.autoconnect": "Connect to one of my printers by itself when it's switched on",
     "connector.connect": "Connect",
     "connector.details": "Printer details & tools",
     "connector.details.info": "Printer",
