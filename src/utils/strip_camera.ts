@@ -78,7 +78,12 @@ export const stripCameraAvailable = (): boolean => !!navigator.mediaDevices?.get
  * `together` of them in one piece (4 on a roll, 1 for a label each). Resolves undefined if the user backs out;
  * rejects with the getUserMedia error if there's no camera to use.
  */
-export const captureGreyStrip = (width: number, rowHeight: number, together: number): Promise<StripCapture | undefined> =>
+export const captureGreyStrip = (
+  width: number,
+  rowHeight: number,
+  together: number,
+  plainOnly = false,
+): Promise<StripCapture | undefined> =>
   new Promise((resolve, reject) => {
     const target = document.createElement("div");
     document.body.appendChild(target);
@@ -88,6 +93,7 @@ export const captureGreyStrip = (width: number, rowHeight: number, together: num
         width,
         rowHeight,
         together,
+        plainOnly,
         onDone: (result, error) => {
           // Unmount after this callback returns, not from inside the component
           setTimeout(() => {

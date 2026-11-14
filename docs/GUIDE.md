@@ -92,7 +92,8 @@ corrections work without a printer; only the test prints need one.
 1. **Print the grey test**: a row of greys for each dither mode. On the MXW01: thermal printers print darker once
    they're warm, so to calibrate for printing several things in a row, print it twice and measure the second.
 2. **Measure it**: lay it flat in even daylight, without shadows, and use **Measure with the camera** (it measures as
-   soon as all rows are in view) or **Choose a photo**.
+   soon as all rows are in view) or **Choose a photo**. A check print (below) is turned down here: a new correction
+   needs the test printed without one.
 3. **Use the result**: the chart shows how dark each grey printed, against the correction in use and the built-in
    one. **Use this correction**, **Keep to compare**, or **Discard**.
 

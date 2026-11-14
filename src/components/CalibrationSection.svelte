@@ -4,7 +4,7 @@
   import { appConfig, printerClient, printerSheetOpen } from "$/stores";
   import type { PreviewProps, PreviewPropsOffset } from "$/types";
   import { DOTS_PER_MM, ROLLS, labelPropsForPreset, printerOf } from "$/defaults";
-  import { locale, tr } from "$/utils/i18n";
+  import { tr } from "$/utils/i18n";
   import { LocalStoragePersistence } from "$/utils/persistence";
   import { fitDotModel, GREY_TEST_MODES, readGreyLabels, readGreyStrip, type DotFit } from "$/utils/grey_strip";
   import { builtInDotModel, D11S_DOT_MODEL } from "$/utils/print_sim";
@@ -26,7 +26,7 @@
     type TestPrintOptions,
   } from "$/utils/test_prints";
   import MdIcon from "$/components/basic/MdIcon.svelte";
-  import CorrectionsSection, { correctionName, type CheckTarget } from "$/components/CorrectionsSection.svelte";
+  import CorrectionsSection, { type CheckTarget } from "$/components/CorrectionsSection.svelte";
   import CorrectionChart, { type ChartCorrection } from "$/components/CorrectionChart.svelte";
   import CheckSheet, { type CheckResult } from "$/components/CheckSheet.svelte";
 
@@ -38,13 +38,6 @@
 
   const printer = $derived(meta.driver);
   const gaps = $derived(hasLabelGaps(meta));
-  /** A check print measured in step 2 is taken to be printed with the correction in use */
-  const inUseTarget = (): CheckTarget | undefined => {
-    const active = activeCalibration(printer, $calibrations);
-    const model = active?.model ?? builtInDotModel(printer);
-    return model && { label: correctionName(active, $locale, $tr), model, note: "" };
-  };
-
   /** The test print being sent, so its button shows the spinner */
   let busy = $state<"grey" | "corrected" | "offset" | undefined>();
   let offsetStep = $state<number>(DOTS_PER_MM);
@@ -242,7 +235,9 @@
 
   /**
    * A measured grey test: printed without correction, fit this printer's dot model to it and show what came of it;
-   * printed with correction (a check print), say how close its greys came to where they should be
+   * printed with correction (a check print measured from its entry in the list), say how close its greys came to
+   * where they should be. Step 2 refuses a check print: a correction can only be worked out from a plain one, and
+   * which correction the check was printed with is only known from the entry it was printed from.
    */
   const showFit = (
     check: CheckTarget | undefined,
@@ -257,7 +252,11 @@
   ) => {
     // A check print gets its own sheet and leaves a result still to be decided in step 3 as it is
     if (corrected) {
-      checkResult = { overlay, measured, label: check?.label };
+      if (!check) {
+        say($tr("calibration.measure.corrected"));
+        return;
+      }
+      checkResult = { overlay, measured, label: check.label };
       checkShown = true;
       return;
     }
@@ -273,14 +272,14 @@
   const start = (check?: CheckTarget) => {
     photoMessage = "";
     fromList = check !== undefined;
-    return check ?? inUseTarget();
+    return check;
   };
 
   const measureWithCamera = async (from?: CheckTarget) => {
     const check = start(from);
     try {
       const { width, height } = readSize();
-      const capture = await captureGreyStrip(width, height, gaps ? 1 : GREY_TEST_MODES.length);
+      const capture = await captureGreyStrip(width, height, gaps ? 1 : GREY_TEST_MODES.length, from === undefined);
       if (capture) {
         const c = capture;
         showFit(check, "camera", c.corrected, c.measured, c.marks, c.width, height, c.overlay, c.paperEvenness);

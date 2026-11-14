@@ -11,11 +11,13 @@
     rowHeight: number;
     /** Rows in one piece: all of them on a roll, 1 when every row is a label of its own */
     together: number;
+    /** Measuring a new correction (step 2): a check print is turned down here, with a word why */
+    plainOnly?: boolean;
     /** Called once: the test as read, undefined if the user closed the camera, or the error if the camera failed */
     onDone: (result: StripCapture | undefined, error?: unknown) => void;
   };
 
-  let { width, rowHeight, together, onDone }: Props = $props();
+  let { width, rowHeight, together, plainOnly = false, onDone }: Props = $props();
 
   /**
    * Our own camera instead of the phone's camera app: video frames come without HDR, sharpening or scene modes, which
@@ -49,7 +51,7 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   let playing = $state(false);
-  let status = $state<"starting" | "search" | "closer" | "hold" | "next">("starting");
+  let status = $state<"starting" | "search" | "closer" | "hold" | "next" | "corrected">("starting");
   /** Steady frames collected of every row */
   let counts = $state<number[]>(Array(MODES).fill(0));
 
@@ -133,6 +135,11 @@
       status = "search";
       before.fill(undefined);
       drawBoxes(undefined, false);
+    } else if (plainOnly && reading.corrected) {
+      // A check print can't make a new correction: say so and keep looking for the plain test
+      status = "corrected";
+      before.fill(undefined);
+      drawBoxes(reading, false);
     } else {
       if (marks !== reading.marks || corrected !== reading.corrected || rowWidth !== reading.width) {
         // Another kind of print than before (plain or check print), or labels of another size than thought: start over
@@ -252,6 +259,8 @@
     <div class="status">
       {#if status === "starting"}
         {$tr("editor.scan.starting")}
+      {:else if status === "corrected"}
+        {$tr("calibration.auto.cam.corrected")}
       {:else if status === "closer"}
         {$tr("calibration.auto.cam.closer")}
       {:else if status === "hold"}
