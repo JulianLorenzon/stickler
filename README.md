@@ -35,6 +35,9 @@ access, no account and no ads.
 - **Save** labels on the device and export them as JSON or PNG
 - **In five languages:** English, Dutch, German, Spanish and Polish
 
+How to use each feature: [docs/GUIDE.md](docs/GUIDE.md), also on
+[stickler.julianlorenzon.com/guide.html](https://stickler.julianlorenzon.com/guide.html).
+
 ## Get it
 
 Stickler runs on Android 6.0 or newer and is on its way to Google Play; see
