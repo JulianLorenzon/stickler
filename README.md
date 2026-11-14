@@ -28,8 +28,9 @@ access, no account and no ads.
 - **Copy codes:** scan a QR code or barcode with the camera, or read it from a picture (like a screenshot of a Wi-Fi
   share code), and get an editable copy on the label. Pictures shared to Stickler from other apps work too
 - **Batch print** from a data table, one label per row
-- **Calibrate** from the printer panel: a grey test print for each printer, and an offset test strip for the
-  Fichero's labels
+- **Calibrate** from the app menu: print a grey test and measure it with the camera or from a photo, and Stickler
+  fits the dot correction to your printer. Keep several corrections and compare them, and print a check to see
+  whether greys land where they should. The Fichero's labels also get an offset test strip
 - **Several printers:** Stickler remembers them and connects to whichever one is switched on
 - **Save** labels on the device and export them as JSON or PNG
 - **In five languages:** English, Dutch, German, Spanish and Polish
