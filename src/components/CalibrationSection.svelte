@@ -13,7 +13,6 @@
   import { Toasts } from "$/utils/toasts";
   import { Utils } from "$/lib/printer";
   import {
-    dotGainCurveFor,
     drawOffsetLabel,
     formatMm,
     GREY_ROW,
@@ -27,7 +26,6 @@
     type TestPrintOptions,
   } from "$/utils/test_prints";
   import MdIcon from "$/components/basic/MdIcon.svelte";
-  import DotPatch from "$/components/DotPatch.svelte";
   import CorrectionsSection from "$/components/CorrectionsSection.svelte";
 
   /**
@@ -40,7 +38,6 @@
   const gaps = $derived(hasLabelGaps(meta));
   /** The correction a corrected grey test prints with: the one in use */
   const activeModel = $derived(activeCalibration(printer, $calibrations)?.model ?? builtInDotModel(printer));
-  const activeSaved = $derived(activeCalibration(printer, $calibrations));
 
   /** The test print being sent, so its button shows the spinner */
   let busy = $state<"grey" | "corrected" | "offset" | undefined>();
@@ -169,15 +166,13 @@
 
   const connect = () => ($printerSheetOpen = true);
 
-  /** The dither the chart and the dot patches show: the print preview's when it's one on the grey test */
+  /** The dither the chart shows: the print preview's when it's one on the grey test */
   const modeOfPreview = (): number => {
     const mode = loadPreviewProps().postProcess;
     const i = GREY_TEST_MODES.findIndex((m) => m.mode === (mode === "smart" ? "dither" : mode));
     return Math.max(0, i);
   };
   let modeIndex = $state(modeOfPreview());
-  const patchMode = $derived(GREY_TEST_MODES[modeIndex]);
-  const patchCurve = $derived(activeModel ? dotGainCurveFor(printer, patchMode.mode, 128, activeModel) : undefined);
 
   const printOffsetStrip = () => {
     const label = testLabel();
@@ -219,10 +214,8 @@
     const printed = gaps ? printedSizes()[printer] : undefined;
     return printed && printed.width > 0 && printed.height > 0 ? { width: printed.width, height: printed.height } : rowSize();
   };
-  const rollText = $derived.by(() => {
-    const { width, height } = rowSize();
-    return `${Number((width / DOTS_PER_MM).toFixed(1))} × ${Number((height / DOTS_PER_MM).toFixed(1))} mm`;
-  });
+  /** Width of the grey test on a roll, mm */
+  const rollWidth = $derived(`${Number((rowSize().width / DOTS_PER_MM).toFixed(1))}`);
 
   /** Fit this printer's dot model to a measured grey test (printed without correction) and show what came of it */
   const showFit = (
@@ -334,52 +327,39 @@
 
   <div class="step">
     <div class="step-head"><span class="num">1</span>{$tr("calibration.step.print")}</div>
-    <p class="hint">{$tr(gaps ? "calibration.grey.what.labels" : "calibration.grey.what")}</p>
-    {#if gaps && sizeOptions.length > 0}
-      <div class="sizes" role="group" aria-label={$tr("calibration.size")}>
-        <span class="sizes-title">{$tr("calibration.size")}</span>
-        {#each sizeOptions as o (`${o.width}x${o.height}`)}
-          {@const on = o.width === size.width && o.height === size.height}
-          <button class="btn btn-sm {on ? 'btn-primary' : 'btn-outline-secondary'}" aria-pressed={on} onclick={() => (size = { width: o.width, height: o.height })}>
-            {sizeText(o)} mm
-          </button>
-        {/each}
-      </div>
-    {:else if !gaps}
-      <p class="hint">{$tr("calibration.roll")} <strong>{rollText}</strong></p>
+    {#if gaps}
+      <p class="hint">{$tr("calibration.grey.what.labels")}</p>
+      {#if sizeOptions.length > 0}
+        <div class="sizes" role="group" aria-label={$tr("calibration.size")}>
+          <span class="sizes-title">{$tr("calibration.size")}</span>
+          {#each sizeOptions as o (`${o.width}x${o.height}`)}
+            {@const on = o.width === size.width && o.height === size.height}
+            <button class="btn btn-sm {on ? 'btn-primary' : 'btn-outline-secondary'}" aria-pressed={on} onclick={() => (size = { width: o.width, height: o.height })}>
+              {sizeText(o)} mm
+            </button>
+          {/each}
+        </div>
+      {/if}
+    {:else}
+      <p class="hint">{$tr("calibration.grey.what").replace("{width}", rollWidth)}</p>
     {/if}
 
-    <div class="print-choice">
-      <div class="choice">
-        <DotPatch mode={patchMode} />
-        <div class="choice-title">{$tr("calibration.grey.plain")}</div>
-        <div class="choice-hint">{$tr("calibration.grey.plain.hint")}</div>
-        {#if connected}
-          <button class="btn btn-primary w-100" disabled={busy !== undefined} onclick={() => printGreyTest(false)}>
-            {#if busy === "grey"}<span class="spinner-border spinner-border-sm"></span>{:else}<MdIcon icon="print" />{/if}
-            {$tr("calibration.grey.print_plain")}
+    {#if connected}
+      <div class="print-buttons">
+        <button class="btn btn-primary" disabled={busy !== undefined} onclick={() => printGreyTest(false)}>
+          {#if busy === "grey"}<span class="spinner-border spinner-border-sm"></span>{:else}<MdIcon icon="print" />{/if}
+          {$tr("calibration.grey.print_plain")}
+        </button>
+        {#if activeModel}
+          <button class="btn btn-secondary" disabled={busy !== undefined} onclick={() => printGreyTest(true)}>
+            {#if busy === "corrected"}<span class="spinner-border spinner-border-sm"></span>{:else}<MdIcon icon="print" />{/if}
+            {$tr("calibration.grey.print_with")}
           </button>
         {/if}
       </div>
-      {#if activeModel}
-        <div class="choice">
-          <DotPatch mode={patchMode} curve={patchCurve} />
-          <div class="choice-title">{$tr("calibration.grey.with")}</div>
-          <div class="choice-hint">
-            {activeSaved ? $tr("calibration.grey.with.own") : $tr("calibration.grey.with.builtin")}
-          </div>
-          {#if connected}
-            <button class="btn btn-secondary w-100" disabled={busy !== undefined} onclick={() => printGreyTest(true)}>
-              {#if busy === "corrected"}<span class="spinner-border spinner-border-sm"></span>{:else}<MdIcon icon="print" />{/if}
-              {$tr("calibration.grey.print_with")}
-            </button>
-          {/if}
-        </div>
-      {/if}
-    </div>
-    <p class="hint mt-2 mb-0">{$tr("calibration.grey.patches")} {patchMode.name}.</p>
-    {#if !connected}
-      <button class="btn btn-primary w-100 mt-2" onclick={connect}>
+      <p class="hint mt-2 mb-0">{$tr("calibration.grey.buttons.hint")}</p>
+    {:else}
+      <button class="btn btn-primary w-100" onclick={connect}>
         <MdIcon icon="bluetooth" />
         {$tr("calibration.connect")}
       </button>
@@ -589,35 +569,12 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Without and with correction side by side, each with the dots it sends and its print button */
-  .print-choice {
+  /* Print to measure and print to check side by side */
+  .print-buttons {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-  }
-
-  .choice {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .choice-title {
-    font-weight: 600;
-    font-size: 0.875rem;
-    margin-top: 0.25rem;
-  }
-
-  .choice-hint {
-    flex: 1;
-    font-size: 0.75rem;
-    color: var(--ink-secondary);
-    margin-bottom: 0.25rem;
-  }
-
-  .choice .btn {
-    padding-left: 0.25rem;
-    padding-right: 0.25rem;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 0.5rem;
   }
 
   .result-actions {
