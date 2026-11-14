@@ -2,7 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import MdIcon from "$/components/basic/MdIcon.svelte";
   import { tr } from "$/utils/i18n";
-  import { GREY_TEST_MODES, readGreyStrip, type RowReading, type StripReading } from "$/utils/grey_strip";
+  import { GREY_TEST_MODES, readGreyLabels, readGreyStrip, type RowReading, type StripReading } from "$/utils/grey_strip";
   import { rowPicture, stackPictures, strokeQuads, type StripCapture } from "$/utils/strip_camera";
 
   type Props = {
@@ -53,6 +53,9 @@
   /** Steady frames collected of every row */
   let counts = $state<number[]>(Array(MODES).fill(0));
 
+  /** Width of a row as the frames are read: the one asked for until the labels turn out to be another size */
+  // svelte-ignore state_referenced_locally
+  let rowWidth = width;
   const work = document.createElement("canvas");
   const wctx = work.getContext("2d", { willReadFrequently: true })!;
   /** Per row: the readings collected, its picture from the last of them, and where it was in the frame before */
@@ -119,7 +122,9 @@
     work.width = Math.round(video.videoWidth * scale);
     work.height = Math.round(video.videoHeight * scale);
     wctx.drawImage(video, 0, 0, work.width, work.height);
-    const reading = readGreyStrip(wctx.getImageData(0, 0, work.width, work.height), width, rowHeight);
+    // Labels can be another size than the one asked for; a roll is as wide as the print head
+    const frame = wctx.getImageData(0, 0, work.width, work.height);
+    const reading = together === 1 ? readGreyLabels(frame, rowWidth, rowHeight) : readGreyStrip(frame, rowWidth, rowHeight);
     const now = performance.now();
 
     if (typeof reading === "string") {
@@ -131,10 +136,11 @@
       status = "corrected";
       drawBoxes(reading, false);
     } else {
-      if (marks !== reading.marks) {
-        // Another kind of print than before: start over
+      if (marks !== reading.marks || rowWidth !== reading.width) {
+        // Another kind of print than before, or labels of another size than thought: start over
         good = good.map(() => []);
         marks = reading.marks;
+        rowWidth = reading.width;
       }
       let counted = false, tooSmall = false;
       for (const row of reading.rows) {
@@ -151,7 +157,7 @@
         counted = true;
         if (good[row.mode].length < FRAMES) {
           good[row.mode].push(row);
-          pictures[row.mode] = rowPicture(work, row, width, rowHeight);
+          pictures[row.mode] = rowPicture(work, row, rowWidth, rowHeight);
         }
       }
       for (let m = 0; m < MODES; m++) if (!reading.rows.some((r) => r.mode === m)) before[m] = undefined;
@@ -164,6 +170,7 @@
         finish({
           measured: good.map((g) => g[0].measured.map((_, i) => median(g.map((r) => r.measured[i])))),
           marks: reading.marks,
+          width: rowWidth,
           overlay: stackPictures(pictures.filter((p) => p !== undefined)),
           paperEvenness: median(good.flat().map((r) => r.paperEvenness)),
         });

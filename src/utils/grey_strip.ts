@@ -125,6 +125,8 @@ export interface RowReading {
   measured: number[];
   /** Photo pixels per printer dot */
   scale: number;
+  /** The row's length against its height, 1 when both fit the size it was read as */
+  stretch: number;
   /** How uneven the light is: darkest / brightest paper sample */
   paperEvenness: number;
   /** Solid patch brightness relative to the paper (how black the black is in this photo) */
@@ -148,6 +150,9 @@ export interface StripReading {
   /** Smallest scale and paper evenness among the rows */
   scale: number;
   paperEvenness: number;
+  /** The width the rows were read as, dots, and the middle one of their `stretch` */
+  width: number;
+  stretch: number;
 }
 
 interface Blob {
@@ -558,6 +563,7 @@ const readCodedRow = (
     mode,
     corrected: cells[2],
     scale,
+    stretch,
     frame: { origin: [middle[0] - (W / 2) * u[0] - (H / 2) * v[0], middle[1] - (W / 2) * u[1] - (H / 2) * v[1]], u, v },
   };
 };
@@ -592,7 +598,7 @@ const readPlainColumn = (
     const scale = Math.hypot(v[0], v[1]);
     const read = measureRow(L, w, h, lay, spots, toPhoto, scale);
     if (!read) return undefined;
-    rows.push({ ...read, mode: row, corrected: false, scale, frame: { origin: toPhoto(0, 0), u, v } });
+    rows.push({ ...read, mode: row, corrected: false, scale, stretch: 1, frame: { origin: toPhoto(0, 0), u, v } });
   }
   return rows;
 };
@@ -658,7 +664,38 @@ export const readGreyStrip = (photo: Pixels, W: number, rowH: number): StripRead
     corrected: rows.some((r) => r.corrected),
     scale: Math.min(...rows.map((r) => r.scale)),
     paperEvenness: Math.min(...rows.map((r) => r.paperEvenness)),
+    width: W,
+    stretch: rows.map((r) => r.stretch).sort((a, b) => a - b)[rows.length >> 1],
   };
+};
+
+/** From the middle of the mark to the middle of the 100% patch in a row `W` dots wide, dots */
+const rowSpan = (W: number, rowH: number): number => {
+  const lay = greyRowLayout(W, rowH);
+  return patchX(lay, lay.n - 1) - lay.markX - lay.markW / 2;
+};
+
+/**
+ * `readGreyStrip` for labels whose width isn't known for sure: the test may have been printed on other labels than
+ * `W` says (the printer can't tell what's loaded). Rows that come out clearly longer or shorter than their height
+ * allows are read again as the width that fits (whole millimetres), and that reading is the one returned when it
+ * fits better; `width` in the result says which it was. A phone held at a slant shortens rows too, but not by this
+ * much, and the patches are where they are either way.
+ */
+export const readGreyLabels = (photo: Pixels, W: number, rowH: number): StripReading | StripFailure => {
+  let best = readGreyStrip(photo, W, rowH);
+  for (let again = 0; again < 2; again++) {
+    if (typeof best === "string" || !best.marks || Math.abs(best.stretch - 1) < 0.12) break;
+    const span = rowSpan(best.width, rowH) * best.stretch;
+    let width = best.width;
+    for (let w = 120; w <= 960; w += 8) if (Math.abs(rowSpan(w, rowH) - span) < Math.abs(rowSpan(width, rowH) - span)) width = w;
+    if (width === best.width) break;
+    const other = readGreyStrip(photo, width, rowH);
+    if (typeof other === "string" || other.rows.length < best.rows.length) break;
+    if (Math.abs(other.stretch - 1) > Math.abs(best.stretch - 1) - 0.05) break;
+    best = other;
+  }
+  return best;
 };
 
 // ---------------------------------------------------------------------------------------------------------------

@@ -83,9 +83,11 @@ const labels = (mm, modes = [0, 1, 2, 3]) => {
   return { W, H, w: lw + 40, h: modes.length * pitch + 16, pieces, truth: Object.fromEntries(modes.map((m, i) => [m, pieces[i].rows[0].truth])), at: Object.fromEntries(modes.map((m, i) => [m, [pieces[i].x + 8, pieces[i].y + 8]])) };
 };
 
-const check = (name, sheet, view) => {
+/** `asked`: the label width the reading is told (mm), when that's not the width of the labels in the picture */
+const check = (name, sheet, view, asked) => {
   const frame = photo(sheet, view);
-  const r = M.readGreyStrip(frame, sheet.W, sheet.H);
+  const r = asked ? M.readGreyLabels(frame, asked * 8 - 8, sheet.H) : M.readGreyStrip(frame, sheet.W, sheet.H);
+  if (typeof r !== "string" && r.width !== sheet.W) { console.log("  " + name.padEnd(46), `FAILED: read as ${r.width} dots wide, is ${sheet.W}`); return frame; }
   if (typeof r === "string") { console.log("  " + name.padEnd(46), "FAILED:", r); return frame; }
   const diffs = r.rows.flatMap((row) => row.measured.map((v, j) => Math.abs(v - sheet.truth[row.mode][j])));
   // How far the measured boxes are from the middle of their patches, along the row and across it (dots)
@@ -130,6 +132,13 @@ check("40 mm, rows 1.35 as long", labels(40), { scale: 1.5, along: 1.35, turn: -
 check("40 mm, rows 1.35 as long, along the frame", labels(40), { scale: 1.4, along: 1.35, turn: 90, ky: 0.05 });
 check("roll, rows 0.75 as long", R, { scale: 1.5, along: 0.75, kx: 0.08 });
 check("roll, rows 1.3 as long, turned 90", R, { scale: 1.2, along: 1.3, turn: 90 });
+console.log("Labels of another size than the reading is told");
+check("30 mm read as 40 mm", labels(30), { scale: 2.0, turn: 3 }, 40);
+check("30 mm read as 40 mm, tilted, small", labels(30), { scale: 1.5, kx: 0.08, ky: 0.05, turn: -6 }, 40);
+check("40 mm read as 30 mm", labels(40), { scale: 1.6, turn: 5 }, 30);
+check("50 mm read as 40 mm, along the frame", labels(50), { scale: 1.5, turn: 90, kx: 0.05 }, 40);
+check("40 mm read as 50 mm", labels(40), { scale: 1.8, ky: 0.06 }, 50);
+check("40 mm read as 40 mm, tilted", labels(40), { scale: 2.0, kx: 0.1, ky: 0.06, turn: 8 }, 40);
 for (const [file, f] of [[process.env.FRAME, frame], [process.env.FRAME_ROLL, rollFrame]]) {
   if (!file) continue;
   const head = Buffer.alloc(8);

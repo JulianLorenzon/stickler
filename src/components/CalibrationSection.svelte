@@ -5,7 +5,7 @@
   import { DOTS_PER_MM } from "$/defaults";
   import { tr } from "$/utils/i18n";
   import { LocalStoragePersistence } from "$/utils/persistence";
-  import { fitDotModel, GREY_TEST_MODES, readGreyStrip, type DotFit } from "$/utils/grey_strip";
+  import { fitDotModel, GREY_TEST_MODES, readGreyLabels, readGreyStrip, type DotFit } from "$/utils/grey_strip";
   import { builtInDotModel, D11S_DOT_MODEL, dotModelFor, ownDotModel, setOwnDotModel } from "$/utils/print_sim";
   import { captureGreyStrip, rowPicture, stackPictures, stripCameraAvailable } from "$/utils/strip_camera";
   import { Toasts } from "$/utils/toasts";
@@ -64,6 +64,26 @@
 
   const testLabel = () => testLabelFor(printer, meta, LocalStoragePersistence.loadLastLabelProps());
 
+  /**
+   * The label size the grey test was last printed on, per printer: what a photo of it is read as, whatever label is
+   * open in the designer by then
+   */
+  const PRINTED_KEY = "grey_test_size";
+  const printedSizes = (): Record<string, { width: number; height: number }> => {
+    try {
+      return JSON.parse(localStorage.getItem(PRINTED_KEY) ?? "{}") ?? {};
+    } catch {
+      return {};
+    }
+  };
+  const rememberPrinted = ({ width, height }: { width: number; height: number }) => {
+    try {
+      localStorage.setItem(PRINTED_KEY, JSON.stringify({ ...printedSizes(), [printer]: { width, height } }));
+    } catch {
+      // Without storage a photo is read as the label that's open
+    }
+  };
+
   const pageDelay = async (index: number, total: number) => {
     const delay = $appConfig.pageDelay;
     if (delay !== undefined && delay > 0 && index < total - 1) await Utils.sleep(delay);
@@ -87,6 +107,7 @@
   const printGreyTest = () => {
     const label = testLabel();
     const pages = greyTestPages(printer, meta, label, corrected && hasModel);
+    if (gaps) rememberPrinted(label);
     // The offset is for labels; a strip on a roll prints as it is
     return printPages("grey", gaps ? pages.map((p) => withOffset(p, offset)) : pages, printOptions(label));
   };
@@ -116,14 +137,18 @@
     const label = testLabel();
     return { width: label.width, height: gaps ? label.height : GREY_ROW };
   };
+  /** The rows of the grey test to look for in a photo: as last printed from this phone, else as it prints now */
+  const readSize = () => {
+    const printed = gaps ? printedSizes()[printer] : undefined;
+    return printed && printed.width > 0 && printed.height > 0 ? { width: printed.width, height: printed.height } : rowSize();
+  };
   const paperText = $derived.by(() => {
     const { width, height } = rowSize();
     return `${Number((width / DOTS_PER_MM).toFixed(1))} × ${Number((height / DOTS_PER_MM).toFixed(1))} mm`;
   });
 
   /** Fit this printer's dot model to a measured grey test (printed without correction) and show what came of it */
-  const showFit = (measured: number[][], marks: boolean, overlay: string, paperEvenness: number) => {
-    const { width, height } = rowSize();
+  const showFit = (measured: number[][], marks: boolean, width: number, height: number, overlay: string, paperEvenness: number) => {
     const fit = fitDotModel([{ measured, marks }], width, height, builtInDotModel(printer) ?? D11S_DOT_MODEL);
     photoResult = { overlay, fit, uneven: paperEvenness < 0.75 };
   };
@@ -133,9 +158,9 @@
     photoMessage = "";
     photoResult = undefined;
     try {
-      const { width, height } = rowSize();
+      const { width, height } = readSize();
       const capture = await captureGreyStrip(width, height, gaps ? 1 : GREY_TEST_MODES.length);
-      if (capture) showFit(capture.measured, capture.marks, capture.overlay, capture.paperEvenness);
+      if (capture) showFit(capture.measured, capture.marks, capture.width, height, capture.overlay, capture.paperEvenness);
     } catch (e) {
       console.error(e);
       photoMessage = $tr((e as Error)?.name === "NotAllowedError" ? "editor.scan.no_permission" : "editor.scan.no_camera");
@@ -158,8 +183,10 @@
       ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       bitmap.close();
 
-      const { width, height } = rowSize();
-      const reading = readGreyStrip(ctx.getImageData(0, 0, canvas.width, canvas.height), width, height);
+      const { width: asked, height } = readSize();
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      // Labels can be another size than the one asked for; a roll is as wide as the print head
+      const reading = gaps ? readGreyLabels(pixels, asked, height) : readGreyStrip(pixels, asked, height);
       if (typeof reading === "string") {
         photoMessage = $tr("calibration.auto.not_found");
         return;
@@ -168,8 +195,9 @@
         photoMessage = $tr(reading.corrected ? "calibration.auto.corrected" : "calibration.auto.partial");
         return;
       }
+      const { width } = reading;
       const overlay = stackPictures(reading.rows.map((row) => rowPicture(canvas, row, width, height)));
-      showFit(reading.measured, reading.marks, overlay, reading.paperEvenness);
+      showFit(reading.measured, reading.marks, width, height, overlay, reading.paperEvenness);
     } catch (e) {
       console.error(e);
       photoMessage = $tr("calibration.auto.failed");
