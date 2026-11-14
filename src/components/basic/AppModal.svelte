@@ -17,16 +17,25 @@
 
   let modalEl: HTMLElement;
   let modal: Modal;
+  /**
+   * Opened over another modal: Bootstrap's backdrop stays under that one, so this one dims what's behind it itself
+   * (the modal's own box covers the screen)
+   */
+  let stacked = $state(false);
 
   onMount(() => {
+    stacked = document.querySelector(".modal.show") !== null;
     modal = new Modal(modalEl);
     modal.show();
 
-    modalEl.addEventListener('hide.bs.modal', () => {
+    // Bootstrap's events bubble: a modal opened inside this one must not close this one too
+    modalEl.addEventListener('hide.bs.modal', (e) => {
+      if (e.target !== modalEl) return;
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     });
 
-    modalEl.addEventListener("hidden.bs.modal", () => {
+    modalEl.addEventListener("hidden.bs.modal", (e) => {
+      if (e.target !== modalEl) return;
       if (onClose) onClose();
       show = false;
     });
@@ -47,7 +56,7 @@
   };
 </script>
 
-<div bind:this={modalEl} class="modal fade" tabindex="-1" aria-hidden="true">
+<div bind:this={modalEl} class="modal fade" class:stacked tabindex="-1" aria-hidden="true">
   <div
     class="modal-dialog modal-dialog-centered modal-dialog-scrollable"
     class:modal-sheet={variant === "sheet"}
@@ -70,3 +79,9 @@
     </div>
   </div>
 </div>
+
+<style>
+  .modal.stacked {
+    background: rgb(0 0 0 / 0.5);
+  }
+</style>

@@ -698,6 +698,31 @@ export const readGreyLabels = (photo: Pixels, W: number, rowH: number): StripRea
   return best;
 };
 
+export interface CheckError {
+  /** Mean of measured minus expected per row and over all rows: + darker than it should be, - lighter */
+  bias: number[];
+  biasAll: number;
+  /** Root mean square difference per row and over all rows: bias and scatter together */
+  rms: number[];
+  rmsAll: number;
+}
+
+/**
+ * How far the patches of a strip printed with dot correction landed from `expected` (darkness relative to the solid
+ * patch, per row). The bias is what a correction gets wrong; a photo mostly scatters the patches around it.
+ */
+export const checkError = (measured: number[][], expected: number[][]): CheckError => {
+  const diffs = measured.map((row, r) => row.map((v, i) => v - expected[r][i]));
+  const mean = (a: number[]) => a.reduce((x, v) => x + v, 0) / Math.max(1, a.length);
+  const all = diffs.flat();
+  return {
+    bias: diffs.map(mean),
+    biasAll: mean(all),
+    rms: diffs.map((d) => Math.sqrt(mean(d.map((v) => v * v)))),
+    rmsAll: Math.sqrt(mean(all.map((v) => v * v))),
+  };
+};
+
 // ---------------------------------------------------------------------------------------------------------------
 // Fitting a dot model
 // ---------------------------------------------------------------------------------------------------------------

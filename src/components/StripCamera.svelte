@@ -49,7 +49,7 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   let playing = $state(false);
-  let status = $state<"starting" | "search" | "closer" | "hold" | "next" | "corrected">("starting");
+  let status = $state<"starting" | "search" | "closer" | "hold" | "next">("starting");
   /** Steady frames collected of every row */
   let counts = $state<number[]>(Array(MODES).fill(0));
 
@@ -63,6 +63,8 @@
   const pictures: (HTMLCanvasElement | undefined)[] = Array(MODES).fill(undefined);
   const before: ({ at: [number, number]; time: number } | undefined)[] = Array(MODES).fill(undefined);
   let marks: boolean | undefined;
+  /** Printed with dot correction (a check print) or without */
+  let corrected: boolean | undefined;
 
   /** Where to hold the print, about: the outline of a piece with its rows of patches, in the middle of the frame */
   const drawGuide = (ctx: CanvasRenderingContext2D, w: number, h: number, counting: boolean) => {
@@ -131,15 +133,12 @@
       status = "search";
       before.fill(undefined);
       drawBoxes(undefined, false);
-    } else if (reading.corrected) {
-      // Printed with dot correction: that says how well a correction works, not what the printer does
-      status = "corrected";
-      drawBoxes(reading, false);
     } else {
-      if (marks !== reading.marks || rowWidth !== reading.width) {
-        // Another kind of print than before, or labels of another size than thought: start over
+      if (marks !== reading.marks || corrected !== reading.corrected || rowWidth !== reading.width) {
+        // Another kind of print than before (plain or check print), or labels of another size than thought: start over
         good = good.map(() => []);
         marks = reading.marks;
+        corrected = reading.corrected;
         rowWidth = reading.width;
       }
       let counted = false, tooSmall = false;
@@ -170,6 +169,7 @@
         finish({
           measured: good.map((g) => g[0].measured.map((_, i) => median(g.map((r) => r.measured[i])))),
           marks: reading.marks,
+          corrected: reading.corrected,
           width: rowWidth,
           overlay: stackPictures(pictures.filter((p) => p !== undefined)),
           paperEvenness: median(good.flat().map((r) => r.paperEvenness)),
@@ -254,8 +254,6 @@
         {$tr("editor.scan.starting")}
       {:else if status === "closer"}
         {$tr("calibration.auto.cam.closer")}
-      {:else if status === "corrected"}
-        {$tr("calibration.auto.corrected")}
       {:else if status === "hold"}
         {$tr("calibration.auto.cam.hold")}
       {:else if status === "next" || (together === 1 && counts.some((c) => c >= FRAMES))}

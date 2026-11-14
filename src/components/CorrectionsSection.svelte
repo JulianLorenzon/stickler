@@ -1,86 +1,88 @@
 <script lang="ts" module>
   import type { DotModel } from "$/utils/print_sim";
+  import type { Calibration } from "$/utils/calibrations";
+  import type { TranslationKey } from "$/utils/i18n";
 
-  /** A measurement not saved yet, shown with the saved ones to compare */
-  export interface PendingCalibration {
+  /** A correction to print a check with and measure that print against */
+  export interface CheckTarget {
+    label: string;
     model: DotModel;
-    rms: number;
-    measured: number[][];
+    /** Printed on the check, after "corrected": which correction it was */
+    note: string;
   }
+
+  /** How a saved correction is called: when it was measured (`long` with year), or earlier for ones from before dates */
+  export const correctionName = (saved: Calibration | undefined, locale: string, t: (key: TranslationKey) => string) => {
+    if (!saved) return t("calibration.list.builtin");
+    if (!saved.date) return t("calibration.list.earlier");
+    return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(saved.date);
+  };
 </script>
 
 <script lang="ts">
   import type { PrinterId } from "$/types";
   import { DOTS_PER_MM } from "$/defaults";
-  import { locale, tr, type TranslationKey } from "$/utils/i18n";
-  import { GREY_TEST_MODES } from "$/utils/grey_strip";
-  import { builtInDotModel, toneCurve } from "$/utils/print_sim";
+  import { locale, tr } from "$/utils/i18n";
+  import { builtInDotModel } from "$/utils/print_sim";
   import {
     activeCalibration,
     calibrations,
     deleteCalibration,
     savedCalibrations,
     useCalibration,
-    type Calibration,
   } from "$/utils/calibrations";
   import { Toasts } from "$/utils/toasts";
   import MdIcon from "$/components/basic/MdIcon.svelte";
-  import ToneChart, { type ToneLine } from "$/components/ToneChart.svelte";
+  import CorrectionChart, { type ChartCorrection } from "$/components/CorrectionChart.svelte";
 
   /**
-   * The corrections of a printer: the built-in one, those measured on this phone and a new measurement, as tone curves
-   * to compare and as a list to pick the one in use from
+   * The corrections of a printer, the built-in one and those kept on this phone, as a list. Tapping one opens it:
+   * its curve against the one in use, its five numbers, a check print with it, use it or delete it.
    */
   let {
     printer,
     modeIndex = $bindable(0),
-    picked = $bindable(),
-    pending,
-  }: { printer: PrinterId; modeIndex?: number; picked?: string; pending?: PendingCalibration } = $props();
-
-  /**
-   * Line colours by role, at most three on the chart at once (the first three slots of the data-viz palette's dark
-   * steps pass the colour-blindness checks against the card in every pair): ours in grey, the one in use in orange,
-   * the one looked at in blue
-   */
-  const BUILT_IN_COLOUR = "var(--ink-secondary)";
-  const IN_USE_COLOUR = "#d95926";
-  const OTHER_COLOUR = "#3987e5";
+    open = $bindable(),
+    connected,
+    printing,
+    measuring,
+    canCamera,
+    onCheck,
+  }: {
+    printer: PrinterId;
+    modeIndex?: number;
+    open?: string;
+    connected: boolean;
+    /** A check print is being sent */
+    printing: boolean;
+    measuring: boolean;
+    canCamera: boolean;
+    onCheck: (target: CheckTarget, how: "print" | "camera" | "photo") => void;
+  } = $props();
 
   const BUILT_IN = "builtin";
-  const NEW = "new";
 
   interface Entry {
     id: string;
     model: DotModel;
     saved?: Calibration;
-    rms?: number;
-    measured?: number[][];
   }
 
   const builtIn = $derived(builtInDotModel(printer));
   const active = $derived(activeCalibration(printer, $calibrations));
   const activeId = $derived(active?.id ?? BUILT_IN);
   const entries = $derived<Entry[]>([
-    ...(pending ? [{ id: NEW, ...pending }] : []),
     ...(builtIn ? [{ id: BUILT_IN, model: builtIn }] : []),
-    ...savedCalibrations(printer, $calibrations).map((c) => ({ id: c.id, model: c.model, saved: c, rms: c.rms, measured: c.measured })),
+    ...savedCalibrations(printer, $calibrations).map((c) => ({ id: c.id, model: c.model, saved: c })),
   ]);
 
-  /** The entry looked at (`picked`): a new measurement as soon as there is one, else the one in use */
-  $effect(() => {
-    if (pending) picked = NEW;
+  const name = (e: Entry) => correctionName(e.saved, $locale, $tr);
+
+  const target = (e: Entry): CheckTarget => ({
+    label: name(e),
+    model: e.model,
+    note: !e.saved ? "built-in" : e.saved.date ? new Intl.DateTimeFormat($locale, { day: "numeric", month: "short" }).format(e.saved.date) : "earlier",
   });
-  const selected = $derived(entries.find((e) => e.id === picked) ?? entries.find((e) => e.id === activeId) ?? entries[0]);
-
-  const dateText = (date: number, long = false) =>
-    new Intl.DateTimeFormat($locale, long ? { dateStyle: "medium", timeStyle: "short" } : { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
-
-  const name = (e: Entry) => {
-    if (e.id === NEW) return $tr("calibration.list.new");
-    if (e.id === BUILT_IN) return $tr("calibration.list.builtin");
-    return e.saved?.date ? dateText(e.saved.date) : $tr("calibration.list.earlier");
-  };
 
   const mm = (dots: number) => Number((dots / DOTS_PER_MM).toFixed(1));
   const details = (e: Entry): string => {
@@ -88,33 +90,23 @@
     const parts: string[] = [];
     if (e.saved?.size) parts.push(`${mm(e.saved.size.width)} × ${mm(e.saved.size.height)} mm`);
     if (e.saved?.source) parts.push($tr(e.saved.source === "camera" ? "calibration.list.camera" : "calibration.list.photo"));
-    if (e.rms !== undefined) parts.push(`${$tr("calibration.list.error")} ${e.rms.toFixed(3)}`);
+    if (e.saved?.rms !== undefined) parts.push(`${$tr("calibration.list.error")} ${e.saved.rms.toFixed(3)}`);
     return parts.join(" · ");
   };
 
-  const colourOf = (e: Entry): string | undefined => {
-    if (e.id === BUILT_IN) return BUILT_IN_COLOUR;
-    if (e.id === activeId) return IN_USE_COLOUR;
-    if (e.id === selected?.id) return OTHER_COLOUR;
-    return undefined;
+  /** The open entry against the built-in correction and the one in use */
+  const chartFor = (e: Entry): ChartCorrection[] => {
+    const list: ChartCorrection[] = [];
+    if (builtIn) list.push({ id: BUILT_IN, label: $tr("calibration.list.builtin"), role: "builtin", model: builtIn });
+    const inUse = entries.find((x) => x.id === activeId);
+    if (inUse && inUse.id !== BUILT_IN) {
+      list.push({ id: inUse.id, label: $tr("calibration.list.in_use"), role: "in_use", model: inUse.model, measured: inUse.id === e.id ? e.saved?.measured : undefined });
+    }
+    if (e.id !== BUILT_IN && e.id !== activeId) {
+      list.push({ id: e.id, label: name(e), role: "other", model: e.model, measured: e.saved?.measured });
+    }
+    return list;
   };
-
-  const mode = $derived(GREY_TEST_MODES[modeIndex] ?? GREY_TEST_MODES[0]);
-  const curve = (m: DotModel) => toneCurve(`${mode.mode}`, mode.dither, m);
-
-  const lines = $derived<ToneLine[]>(
-    entries
-      .filter((e) => colourOf(e) !== undefined)
-      // Built-in at the back, the one looked at in front
-      .sort((a, b) => Number(a.id === selected?.id) - Number(b.id === selected?.id) || Number(b.id === BUILT_IN) - Number(a.id === BUILT_IN))
-      .map((e) => ({
-        id: e.id,
-        label: name(e),
-        color: colourOf(e)!,
-        values: curve(e.model),
-        measured: e.id === selected?.id ? e.measured?.[modeIndex] : undefined,
-      })),
-  );
 
   const NUMBERS: { key: keyof DotModel; label: TranslationKey }[] = [
     { key: "base", label: "calibration.model.base" },
@@ -132,7 +124,7 @@
   const remove = (e: Entry) => {
     if (!e.saved || !confirm(`${$tr("calibration.list.delete.confirm")} ${name(e)}?`)) return;
     deleteCalibration(printer, e.saved.id);
-    if (picked === e.id) picked = undefined;
+    if (open === e.id) open = undefined;
   };
 </script>
 
@@ -140,39 +132,20 @@
   <h2 class="block-title">{$tr("calibration.list.title")}</h2>
   <p class="intro">{$tr("calibration.list.intro")}</p>
 
-  <div class="card-box">
-    <div class="modes" role="group" aria-label={$tr("calibration.list.dither")}>
-      {#each GREY_TEST_MODES as m, i (m.mode)}
-        <button class="btn btn-sm {i === modeIndex ? 'btn-primary' : 'btn-outline-secondary'}" aria-pressed={i === modeIndex} onclick={() => (modeIndex = i)}>
-          {m.name}
-        </button>
-      {/each}
-    </div>
-    <ToneChart {lines} xTitle={$tr("calibration.chart.asked")} yTitle={$tr("calibration.chart.printed")} />
-    <p class="hint mt-2 mb-0">{$tr("calibration.chart.hint")}</p>
-  </div>
-
   <div class="list">
     {#each entries as e (e.id)}
-      {@const colour = colourOf(e)}
-      <div class="entry" class:selected={e.id === selected?.id}>
-        <button class="entry-head" aria-expanded={e.id === selected?.id} onclick={() => (picked = e.id)}>
-          <span class="key" style:background={colour ?? "transparent"}></span>
+      <div class="entry" class:open={e.id === open}>
+        <button class="entry-head" aria-expanded={e.id === open} onclick={() => (open = open === e.id ? undefined : e.id)}>
           <span class="entry-text">
             <span class="entry-name">{name(e)}</span>
             {#if details(e)}<span class="entry-details">{details(e)}</span>{/if}
           </span>
-          {#if e.id === activeId}
-            <span class="badge-in-use">{$tr("calibration.list.in_use")}</span>
-          {:else if e.id === NEW}
-            <span class="badge-new">{$tr("calibration.list.not_saved")}</span>
-          {/if}
+          {#if e.id === activeId}<span class="badge-in-use">{$tr("calibration.list.in_use")}</span>{/if}
+          <MdIcon icon={e.id === open ? "expand_less" : "expand_more"} />
         </button>
-        {#if e.id === selected?.id}
+        {#if e.id === open}
           <div class="entry-body">
-            {#if e.saved?.date}
-              <p class="hint mb-2">{$tr("calibration.list.measured")} {dateText(e.saved.date, true)}</p>
-            {/if}
+            <CorrectionChart corrections={chartFor(e)} bind:modeIndex />
             <dl class="numbers">
               {#each NUMBERS as n (n.key)}
                 <div>
@@ -181,9 +154,27 @@
                 </div>
               {/each}
             </dl>
-            {#if e.id === NEW}
-              <p class="hint mb-0">{$tr("calibration.list.new.hint")}</p>
-            {:else}
+            <div class="check">
+              <div class="check-title">{$tr("calibration.list.check")}</div>
+              <p class="check-hint">{$tr("calibration.list.check.hint")}</p>
+              <div class="check-buttons">
+                <button class="btn btn-secondary" disabled={printing} onclick={() => onCheck(target(e), "print")}>
+                  {#if printing}<span class="spinner-border spinner-border-sm"></span>{:else}<MdIcon icon={connected ? "print" : "bluetooth"} />{/if}
+                  {$tr(connected ? "calibration.list.check.print" : "calibration.list.check.connect")}
+                </button>
+                {#if canCamera}
+                  <button class="btn btn-secondary" disabled={measuring} onclick={() => onCheck(target(e), "camera")}>
+                    <MdIcon icon="photo_camera" />
+                    {$tr("calibration.list.check.camera")}
+                  </button>
+                {/if}
+                <button class="btn btn-secondary" disabled={measuring} onclick={() => onCheck(target(e), "photo")}>
+                  <MdIcon icon="image" />
+                  {$tr("calibration.list.check.photo")}
+                </button>
+              </div>
+            </div>
+            {#if e.id !== activeId || e.saved}
               <div class="actions">
                 {#if e.id !== activeId}
                   <button class="btn btn-primary" onclick={() => use(e)}>
@@ -226,45 +217,19 @@
     margin: 0 0 0.75rem;
   }
 
-  .hint {
-    font-size: 0.8125rem;
-    color: var(--ink-secondary);
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
   }
 
-  .card-box,
   .entry {
     border-radius: var(--radius-md);
     background: var(--surface-2);
     border: 1px solid var(--border-standard);
   }
 
-  .card-box {
-    padding: 0.875rem;
-  }
-
-  .modes {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0.25rem;
-    margin-bottom: 0.25rem;
-  }
-
-  .modes .btn {
-    min-height: 2.75rem;
-    padding-left: 0.125rem;
-    padding-right: 0.125rem;
-    font-size: 0.75rem;
-    line-height: 1.1;
-  }
-
-  .list {
-    margin-top: 0.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-  }
-
-  .entry.selected {
+  .entry.open {
     border-color: var(--border-emphasis);
   }
 
@@ -281,11 +246,9 @@
     text-align: left;
   }
 
-  .key {
-    flex: none;
-    width: 1rem;
-    height: 3px;
-    border-radius: 2px;
+  .entry-head :global(.material-symbols-outlined),
+  .entry-head :global(i) {
+    color: var(--ink-tertiary);
   }
 
   .entry-text {
@@ -305,22 +268,13 @@
     color: var(--ink-secondary);
   }
 
-  .badge-in-use,
-  .badge-new {
+  .badge-in-use {
     flex: none;
     font-size: 0.75rem;
     padding: 0.125rem 0.5rem;
     border-radius: 999px;
-  }
-
-  .badge-in-use {
     background: var(--accent-subtle);
     color: var(--accent);
-  }
-
-  .badge-new {
-    border: 1px solid var(--border-emphasis);
-    color: var(--ink-secondary);
   }
 
   .entry-body {
@@ -331,7 +285,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
     gap: 0.375rem 0.75rem;
-    margin: 0 0 0.75rem;
+    margin: 0.75rem 0;
   }
 
   .numbers dt {
@@ -343,6 +297,42 @@
   .numbers dd {
     margin: 0;
     font-variant-numeric: tabular-nums;
+  }
+
+  .check {
+    margin: 0 0 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-standard);
+  }
+
+  .check-title {
+    font-weight: 600;
+    font-size: 0.875rem;
+  }
+
+  .check-hint {
+    font-size: 0.8125rem;
+    color: var(--ink-secondary);
+    margin: 0.125rem 0 0.5rem;
+  }
+
+  .check-buttons {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 0.375rem;
+  }
+
+  .check-buttons .btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.125rem;
+    min-height: 3.25rem;
+    padding: 0.25rem;
+    font-size: 0.8125rem;
+    line-height: 1.15;
   }
 
   .actions {

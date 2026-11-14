@@ -143,6 +143,7 @@ export const drawGreyLabel = (
   W: number,
   H: number,
   curve?: Uint8ClampedArray,
+  note = "corrected",
 ): HTMLCanvasElement => {
   const { canvas, ctx } = blank(W, H);
 
@@ -165,7 +166,7 @@ export const drawGreyLabel = (
   ctx.textBaseline = "middle";
   ctx.font = `bold ${Math.round(H * 0.16)}px ${OBJECT_DEFAULTS_TEXT.fontFamily}`;
   // Squeezed where the label is short: right of it the paper has to stay blank
-  ctx.fillText(curve ? `${mode.name} · corrected` : mode.name, x0, top / 2, greyTitleRoom(lay, W));
+  ctx.fillText(curve ? `${mode.name} · ${note}` : mode.name, x0, top / 2, greyTitleRoom(lay, W));
   ctx.textAlign = "center";
   ctx.font = `${Math.round(H * 0.13)}px ${OBJECT_DEFAULTS_TEXT.fontFamily}`;
   for (const i of GREY_NUMBERED) ctx.fillText(`${GREY_TEST_LEVELS[i]}`, x0 + i * (pw + gap) + pw / 2, (bottom + H) / 2, pw);
@@ -187,14 +188,15 @@ export const greyTestPages = (
   printer: PrinterId,
   meta: PrinterModelMeta,
   label: TestLabel,
-  corrected: boolean,
+  correction?: { model: DotModel; note: string },
 ): HTMLCanvasElement[] => {
-  const curve = (mode: PostProcessType) => (corrected ? dotGainCurveFor(printer, mode, 128) : undefined);
+  const curve = (mode: PostProcessType) => (correction ? dotGainCurveFor(printer, mode, 128, correction.model) : undefined);
+  const note = correction?.note;
   if (hasLabelGaps(meta)) {
-    return GREY_TEST_MODES.map((m) => drawGreyLabel(m, label.width, label.height, curve(m.mode)));
+    return GREY_TEST_MODES.map((m) => drawGreyLabel(m, label.width, label.height, curve(m.mode), note));
   }
   const { canvas, ctx } = blank(label.width, GREY_ROW * GREY_TEST_MODES.length);
-  GREY_TEST_MODES.forEach((m, i) => ctx.drawImage(drawGreyLabel(m, label.width, GREY_ROW, curve(m.mode)), 0, i * GREY_ROW));
+  GREY_TEST_MODES.forEach((m, i) => ctx.drawImage(drawGreyLabel(m, label.width, GREY_ROW, curve(m.mode), note), 0, i * GREY_ROW));
   return [canvas];
 };
 

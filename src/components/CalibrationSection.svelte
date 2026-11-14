@@ -4,7 +4,7 @@
   import { appConfig, printerClient, printerSheetOpen } from "$/stores";
   import type { PreviewProps, PreviewPropsOffset } from "$/types";
   import { DOTS_PER_MM, ROLLS, labelPropsForPreset, printerOf } from "$/defaults";
-  import { tr } from "$/utils/i18n";
+  import { locale, tr } from "$/utils/i18n";
   import { LocalStoragePersistence } from "$/utils/persistence";
   import { fitDotModel, GREY_TEST_MODES, readGreyLabels, readGreyStrip, type DotFit } from "$/utils/grey_strip";
   import { builtInDotModel, D11S_DOT_MODEL } from "$/utils/print_sim";
@@ -26,7 +26,9 @@
     type TestPrintOptions,
   } from "$/utils/test_prints";
   import MdIcon from "$/components/basic/MdIcon.svelte";
-  import CorrectionsSection from "$/components/CorrectionsSection.svelte";
+  import CorrectionsSection, { correctionName, type CheckTarget } from "$/components/CorrectionsSection.svelte";
+  import CorrectionChart, { type ChartCorrection } from "$/components/CorrectionChart.svelte";
+  import CheckSheet, { type CheckResult } from "$/components/CheckSheet.svelte";
 
   /**
    * Calibration of a printer as steps: test prints (when it's connected), measuring them and the corrections kept on
@@ -36,8 +38,12 @@
 
   const printer = $derived(meta.driver);
   const gaps = $derived(hasLabelGaps(meta));
-  /** The correction a corrected grey test prints with: the one in use */
-  const activeModel = $derived(activeCalibration(printer, $calibrations)?.model ?? builtInDotModel(printer));
+  /** A check print measured in step 2 is taken to be printed with the correction in use */
+  const inUseTarget = (): CheckTarget | undefined => {
+    const active = activeCalibration(printer, $calibrations);
+    const model = active?.model ?? builtInDotModel(printer);
+    return model && { label: correctionName(active, $locale, $tr), model, note: "" };
+  };
 
   /** The test print being sent, so its button shows the spinner */
   let busy = $state<"grey" | "corrected" | "offset" | undefined>();
@@ -155,16 +161,18 @@
     }
   };
 
-  const printGreyTest = (corrected: boolean) => {
+  /** The grey test, or with `check` a check print: the same corrected with it, its row titles saying which one */
+  const printGreyTest = (check?: CheckTarget) => {
+    if (!connected) return connect();
     const label = testLabel();
-    const pages = greyTestPages(printer, meta, label, corrected && activeModel !== undefined);
+    const pages = greyTestPages(printer, meta, label, check && { model: check.model, note: `corrected ${check.note}` });
     if (gaps) rememberPrinted(label);
     // The offset is for labels; a strip on a roll prints as it is
-    const what = corrected ? "corrected" : "grey";
-    return printPages(what, gaps ? pages.map((p) => withOffset(p, offset)) : pages, printOptions(label));
+    return printPages(check ? "corrected" : "grey", gaps ? pages.map((p) => withOffset(p, offset)) : pages, printOptions(label));
   };
 
   const connect = () => ($printerSheetOpen = true);
+
 
   /** The dither the chart shows: the print preview's when it's one on the grey test */
   const modeOfPreview = (): number => {
@@ -197,8 +205,23 @@
     source: "camera" | "photo";
   }
   let photoResult = $state<MeasuredResult | undefined>();
-  /** The correction looked at in the list below */
-  let picked = $state<string | undefined>();
+  /** A measured check print (printed with correction), shown on its own sheet */
+  let checkResult = $state<CheckResult | undefined>();
+  let checkShown = $state(false);
+  /** The saved correction opened in the list below */
+  let openEntry = $state<string | undefined>();
+
+  /** The new measurement against the built-in correction and the one in use */
+  const resultChart = $derived.by((): ChartCorrection[] => {
+    if (!photoResult) return [];
+    const list: ChartCorrection[] = [];
+    const builtIn = builtInDotModel(printer);
+    if (builtIn) list.push({ id: "builtin", label: $tr("calibration.list.builtin"), role: "builtin", model: builtIn });
+    const active = activeCalibration(printer, $calibrations);
+    if (active) list.push({ id: active.id, label: $tr("calibration.list.in_use"), role: "in_use", model: active.model });
+    list.push({ id: "new", label: $tr("calibration.list.new"), role: "other", model: photoResult.fit.model, measured: photoResult.measured });
+    return list;
+  });
 
   /**
    * The rows of the grey test as it prints now: the label that's open in the designer (labels with gaps, a row on
@@ -217,9 +240,14 @@
   /** Width of the grey test on a roll, mm */
   const rollWidth = $derived(`${Number((rowSize().width / DOTS_PER_MM).toFixed(1))}`);
 
-  /** Fit this printer's dot model to a measured grey test (printed without correction) and show what came of it */
+  /**
+   * A measured grey test: printed without correction, fit this printer's dot model to it and show what came of it;
+   * printed with correction (a check print), say how close its greys came to where they should be
+   */
   const showFit = (
+    check: CheckTarget | undefined,
     source: MeasuredResult["source"],
+    corrected: boolean,
     measured: number[][],
     marks: boolean,
     width: number,
@@ -227,29 +255,45 @@
     overlay: string,
     paperEvenness: number,
   ) => {
+    // A check print gets its own sheet and leaves a result still to be decided in step 3 as it is
+    if (corrected) {
+      checkResult = { overlay, measured, label: check?.label };
+      checkShown = true;
+      return;
+    }
+    if (fromList) Toasts.message($tr("calibration.check.plain"));
     const fit = fitDotModel([{ measured, marks }], width, height, builtInDotModel(printer) ?? D11S_DOT_MODEL);
     photoResult = { overlay, fit, uneven: paperEvenness < 0.75, measured, size: { width, height }, source };
   };
 
   /** Read the grey test with our own camera screen, which measures as soon as the strip is in view */
-  const measureWithCamera = async () => {
+  /** Measuring a check from the list below: what goes wrong is said in a toast, step 2 is out of sight */
+  let fromList = false;
+  const say = (text: string) => (fromList ? Toasts.message(text) : (photoMessage = text));
+  const start = (check?: CheckTarget) => {
     photoMessage = "";
-    photoResult = undefined;
+    fromList = check !== undefined;
+    return check ?? inUseTarget();
+  };
+
+  const measureWithCamera = async (from?: CheckTarget) => {
+    const check = start(from);
     try {
       const { width, height } = readSize();
       const capture = await captureGreyStrip(width, height, gaps ? 1 : GREY_TEST_MODES.length);
-      if (capture) showFit("camera", capture.measured, capture.marks, capture.width, height, capture.overlay, capture.paperEvenness);
+      if (capture) {
+        const c = capture;
+        showFit(check, "camera", c.corrected, c.measured, c.marks, c.width, height, c.overlay, c.paperEvenness);
+      }
     } catch (e) {
       console.error(e);
-      photoMessage = $tr((e as Error)?.name === "NotAllowedError" ? "editor.scan.no_permission" : "editor.scan.no_camera");
+      say($tr((e as Error)?.name === "NotAllowedError" ? "editor.scan.no_permission" : "editor.scan.no_camera"));
     }
   };
 
   /** The same from a photo taken earlier or with the phone's camera app */
-  const measurePhoto = async (file: Blob) => {
+  const measurePhoto = async (file: Blob, check: CheckTarget | undefined) => {
     measuring = true;
-    photoMessage = "";
-    photoResult = undefined;
     try {
       // createImageBitmap turns the photo upright (EXIF)
       const bitmap = await createImageBitmap(file);
@@ -266,33 +310,40 @@
       // Labels can be another size than the one asked for; a roll is as wide as the print head
       const reading = gaps ? readGreyLabels(pixels, asked, height) : readGreyStrip(pixels, asked, height);
       if (typeof reading === "string") {
-        photoMessage = $tr("calibration.auto.not_found");
+        say($tr("calibration.auto.not_found"));
         return;
       }
-      if (reading.corrected || !reading.complete) {
-        photoMessage = $tr(reading.corrected ? "calibration.auto.corrected" : "calibration.auto.partial");
+      if (!reading.complete) {
+        say($tr("calibration.auto.partial"));
         return;
       }
       const { width } = reading;
       const overlay = stackPictures(reading.rows.map((row) => rowPicture(canvas, row, width, height)));
-      showFit("photo", reading.measured, reading.marks, width, height, overlay, reading.paperEvenness);
+      showFit(check, "photo", reading.corrected, reading.measured, reading.marks, width, height, overlay, reading.paperEvenness);
     } catch (e) {
       console.error(e);
-      photoMessage = $tr("calibration.auto.failed");
+      say($tr("calibration.auto.failed"));
     } finally {
       measuring = false;
     }
   };
 
-  const pickPhoto = () => {
+  const pickPhoto = (from?: CheckTarget) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
     input.onchange = () => {
       const file = input.files?.[0];
-      if (file) measurePhoto(file);
+      if (file) measurePhoto(file, start(from));
     };
     input.click();
+  };
+
+  /** A check of a correction in the list: print it, or measure the print */
+  const onCheck = (target: CheckTarget, how: "print" | "camera" | "photo") => {
+    if (how === "print") printGreyTest(target);
+    else if (how === "camera") measureWithCamera(target);
+    else pickPhoto(target);
   };
 
   /** Keeps the measured correction in the list below, and uses it from now on with `use` */
@@ -302,7 +353,7 @@
       const { fit, measured, size, source } = photoResult;
       const saved = saveCalibration(printer, { date: Date.now(), model: fit.model, rms: fit.rms, measured, size, source }, use);
       photoResult = undefined;
-      picked = saved.id;
+      openEntry = use ? undefined : saved.id;
       Toasts.message($tr(use ? "calibration.auto.saved" : "calibration.auto.kept"));
     } catch (e) {
       Toasts.error(e);
@@ -345,18 +396,10 @@
     {/if}
 
     {#if connected}
-      <div class="print-buttons">
-        <button class="btn btn-primary" disabled={busy !== undefined} onclick={() => printGreyTest(false)}>
-          {#if busy === "grey"}<span class="spinner-border spinner-border-sm"></span>{:else}<MdIcon icon="print" />{/if}
-          {$tr("calibration.grey.print_plain")}
-        </button>
-        {#if activeModel}
-          <button class="btn btn-secondary" disabled={busy !== undefined} onclick={() => printGreyTest(true)}>
-            {#if busy === "corrected"}<span class="spinner-border spinner-border-sm"></span>{:else}<MdIcon icon="print" />{/if}
-            {$tr("calibration.grey.print_with")}
-          </button>
-        {/if}
-      </div>
+      <button class="btn btn-primary w-100" disabled={busy !== undefined} onclick={() => printGreyTest()}>
+        {#if busy === "grey"}<span class="spinner-border spinner-border-sm"></span>{:else}<MdIcon icon="print" />{/if}
+        {$tr("calibration.grey.print_plain")}
+      </button>
       <p class="hint mt-2 mb-0">{$tr("calibration.grey.buttons.hint")}</p>
     {:else}
       <button class="btn btn-primary w-100" onclick={connect}>
@@ -370,12 +413,12 @@
     <div class="step-head"><span class="num">2</span>{$tr("calibration.step.measure")}</div>
     <p class="hint">{$tr(gaps ? "calibration.measure.help.labels" : "calibration.measure.help")}</p>
     {#if stripCameraAvailable()}
-      <button class="btn btn-secondary w-100 mb-2" disabled={measuring} onclick={measureWithCamera}>
+      <button class="btn btn-secondary w-100 mb-2" disabled={measuring} onclick={() => measureWithCamera()}>
         <MdIcon icon="photo_camera" />
         {$tr("calibration.auto.camera")}
       </button>
     {/if}
-    <button class="btn btn-secondary w-100" disabled={measuring} onclick={pickPhoto}>
+    <button class="btn btn-secondary w-100" disabled={measuring} onclick={() => pickPhoto()}>
       <MdIcon icon="image" />
       {$tr("calibration.auto.pick")}
     </button>
@@ -390,22 +433,30 @@
   <div class="step">
     <div class="step-head"><span class="num">3</span>{$tr("calibration.step.result")}</div>
     {#if photoResult}
-      <img class="overlay" src={photoResult.overlay} alt="" />
-      <p class="hint mt-2">
+      {@const doubtful = photoResult.uneven || photoResult.fit.rms > 0.07}
+      <p class="hint">
         {$tr("calibration.auto.error")}
         <strong>{photoResult.fit.rms.toFixed(3)}</strong>
       </p>
       {#if photoResult.uneven}<p class="message">{$tr("calibration.auto.uneven")}</p>{/if}
       {#if photoResult.fit.rms > 0.07}<p class="message">{$tr("calibration.auto.poor")}</p>{/if}
-      <p class="hint">{$tr("calibration.result.compare")}</p>
+      <details class="boxes" open={doubtful}>
+        <summary><MdIcon icon="chevron_right" />{$tr("calibration.result.boxes")}</summary>
+        <img class="overlay" src={photoResult.overlay} alt="" />
+      </details>
+      <CorrectionChart corrections={resultChart} bind:modeIndex />
       <div class="result-actions">
-        <button class="btn btn-primary" onclick={() => keepMeasured(true)}>
+        <button class="btn btn-primary use" onclick={() => keepMeasured(true)}>
           <MdIcon icon="check" />
           {$tr("calibration.auto.use")}
         </button>
         <button class="btn btn-secondary" onclick={() => keepMeasured(false)}>
           <MdIcon icon="bookmark_add" />
           {$tr("calibration.auto.keep")}
+        </button>
+        <button class="btn btn-secondary" onclick={() => (photoResult = undefined)}>
+          <MdIcon icon="close" />
+          {$tr("calibration.auto.discard")}
         </button>
       </div>
     {:else}
@@ -417,8 +468,16 @@
 <CorrectionsSection
   {printer}
   bind:modeIndex
-  bind:picked
-  pending={photoResult ? { model: photoResult.fit.model, rms: photoResult.fit.rms, measured: photoResult.measured } : undefined} />
+  bind:open={openEntry}
+  {connected}
+  printing={busy === "corrected"}
+  {measuring}
+  canCamera={stripCameraAvailable()}
+  {onCheck} />
+
+{#if checkShown && checkResult}
+  <CheckSheet result={checkResult} bind:show={checkShown} bind:modeIndex />
+{/if}
 
 {#if gaps}
   <section class="block">
@@ -570,17 +629,45 @@
   }
 
   /* Print to measure and print to check side by side */
-  .print-buttons {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
-    gap: 0.5rem;
-  }
-
+  /* Use it across the card, keep and discard side by side under it */
   .result-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+
+  .result-actions .use {
+    grid-column: 1 / -1;
+  }
+
+  .boxes {
+    margin-bottom: 0.5rem;
+  }
+
+  .boxes summary {
+    min-height: 2.75rem;
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+    color: var(--ink-secondary);
+  }
+
+  .boxes summary {
+    gap: 0.25rem;
+    list-style: none;
+  }
+
+  .boxes summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .boxes summary :global(*) {
+    transition: transform 0.15s;
+  }
+
+  .boxes[open] summary :global(:first-child) {
+    transform: rotate(90deg);
   }
 
   .btn {

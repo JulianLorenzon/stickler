@@ -8,6 +8,8 @@ export interface StripCapture {
   measured: number[][];
   /** Rows with mark and code (false: a strip of app 1.1.0) */
   marks: boolean;
+  /** Printed with dot correction: a check print */
+  corrected: boolean;
   /** Width of a row as it was read, dots: not what was asked for when the labels turned out to be another size */
   width: number;
   /** Every row as last seen, with the measured boxes drawn in, as a data URL */

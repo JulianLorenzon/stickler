@@ -8,14 +8,27 @@
     values: number[];
     /** Measured patches (10..90%) drawn as dots on this line */
     measured?: number[];
+    /** Colour of those dots, when not the line's */
+    dotColor?: string;
   }
 </script>
 
 <script lang="ts">
   import { TONE_STEPS } from "$/utils/print_sim";
 
-  /** Tone curves: grey asked for across, darkness on paper up; the diagonal is a print exactly as asked */
-  let { lines, xTitle, yTitle }: { lines: ToneLine[]; xTitle: string; yTitle: string } = $props();
+  /**
+   * Tone curves: grey asked for across, darkness on paper up; the diagonal is a print exactly as asked. With `readout`
+   * a finger dragged across reads the values off every line.
+   */
+  let {
+    lines,
+    xTitle,
+    yTitle,
+    measuredLabel,
+    readout = true,
+  }: { lines: ToneLine[]; xTitle: string; yTitle: string; measuredLabel?: string; readout?: boolean } = $props();
+
+  const hasMeasured = $derived(lines.some((l) => l.measured?.length));
 
   const W = 320;
   const H = 228;
@@ -40,6 +53,7 @@
   };
 
   const onDown = (e: PointerEvent) => {
+    if (!readout) return;
     svg.setPointerCapture(e.pointerId);
     pick(e);
   };
@@ -51,14 +65,17 @@
 </script>
 
 <div class="tone-chart">
-  <div class="readout" aria-live="polite">
-    <span class="asked">{pct(step / TONE_STEPS)} →</span>
-    {#each lines as line (line.id)}
-      <span class="item"><span class="key" style:background={line.color}></span>{line.label} <strong>{pct(line.values[step])}</strong></span>
-    {/each}
-  </div>
+  {#if readout}
+    <div class="readout" aria-live="polite">
+      <span class="asked">{pct(step / TONE_STEPS)} →</span>
+      {#each lines as line (line.id)}
+        <span class="item"><span class="key" style:background={line.color}></span>{line.label} <strong>{pct(line.values[step])}</strong></span>
+      {/each}
+    </div>
+  {/if}
   <svg
     bind:this={svg}
+    class:static={!readout}
     viewBox="0 0 {W} {H}"
     role="img"
     aria-label={`${yTitle} / ${xTitle}`}
@@ -80,15 +97,20 @@
     {/each}
     {#each lines as line (line.id)}
       {#each line.measured ?? [] as v, i (i)}
-        <circle class="measured" cx={px((i + 1) / 10)} cy={py(v)} r="4" fill={line.color} />
+        <circle class="measured" cx={px((i + 1) / 10)} cy={py(v)} r="4" fill={line.dotColor ?? line.color} />
       {/each}
     {/each}
 
-    <line class="cross" x1={px(step / TONE_STEPS)} x2={px(step / TONE_STEPS)} y1={py(0)} y2={py(1)} />
-    {#each lines as line (line.id)}
-      <circle class="measured" cx={px(step / TONE_STEPS)} cy={py(line.values[step])} r="3.5" fill={line.color} />
-    {/each}
+    {#if readout}
+      <line class="cross" x1={px(step / TONE_STEPS)} x2={px(step / TONE_STEPS)} y1={py(0)} y2={py(1)} />
+      {#each lines as line (line.id)}
+        <circle class="measured" cx={px(step / TONE_STEPS)} cy={py(line.values[step])} r="3.5" fill={line.color} />
+      {/each}
+    {/if}
   </svg>
+  {#if hasMeasured && measuredLabel}
+    <div class="legend"><span class="key-dot"></span>{measuredLabel}</div>
+  {/if}
 </div>
 
 <style>
@@ -101,6 +123,10 @@
     width: 100%;
     height: auto;
     touch-action: none;
+  }
+
+  svg.static {
+    touch-action: auto;
   }
 
   .readout {
@@ -157,6 +183,21 @@
   .measured {
     stroke: var(--surface-2);
     stroke-width: 2;
+  }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8125rem;
+    color: var(--ink-secondary);
+  }
+
+  .key-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--ink-secondary);
   }
 
   .tick {
