@@ -23,12 +23,13 @@ export { GREY_TEST_MODES };
 
 /**
  * The dot gain correction for a printer and dither mode, or undefined when the printer has no dot model or the mode
- * doesn't dither. `thresholdValue` is the slider, which Atkinson and Bayer use. `m` is the model in use unless given.
+ * doesn't dither. `m` is the model in use unless given. Atkinson and Bayer are corrected as dithered at the middle
+ * threshold (128): a correction worked out at the slider's threshold makes the greys land as asked whatever it is,
+ * so the slider did nothing; this way it makes them darker or lighter on top of the correction.
  */
 export const dotGainCurveFor = (
   printer: PrinterId,
   mode: PostProcessType,
-  thresholdValue: number,
   m: DotModel | undefined = dotModelFor(printer),
 ): Uint8ClampedArray | undefined => {
   if (!m) return undefined;
@@ -41,11 +42,10 @@ export const dotGainCurveFor = (
     case "werness":
       return dotGainCurve(`${p}:werness`, werness, m);
     case "smart":
-      return dotGainCurve(`${p}:atkinson:128`, (i) => atkinson(i, 128), m);
     case "dither":
-      return dotGainCurve(`${p}:atkinson:${thresholdValue}`, (i) => atkinson(i, thresholdValue), m);
+      return dotGainCurve(`${p}:atkinson:128`, (i) => atkinson(i, 128), m);
     case "bayer":
-      return dotGainCurve(`${p}:bayer:${thresholdValue}`, (i) => bayer(i, thresholdValue), m);
+      return dotGainCurve(`${p}:bayer:128`, (i) => bayer(i, 128), m);
     default:
       return undefined;
   }
@@ -190,7 +190,7 @@ export const greyTestPages = (
   label: TestLabel,
   correction?: { model: DotModel; note: string },
 ): HTMLCanvasElement[] => {
-  const curve = (mode: PostProcessType) => (correction ? dotGainCurveFor(printer, mode, 128, correction.model) : undefined);
+  const curve = (mode: PostProcessType) => (correction ? dotGainCurveFor(printer, mode, correction.model) : undefined);
   const note = correction?.note;
   if (hasLabelGaps(meta)) {
     return GREY_TEST_MODES.map((m) => drawGreyLabel(m, label.width, label.height, curve(m.mode), note));

@@ -215,7 +215,7 @@
 
   /** The dot gain correction for a mode, or undefined when it's off, the mode doesn't dither or the printer has no model */
   const curveFor = (mode: PostProcessType): Uint8ClampedArray | undefined =>
-    dotGain ? dotGainCurveFor(targetPrinter, mode, thresholdValue) : undefined;
+    dotGain ? dotGainCurveFor(targetPrinter, mode) : undefined;
 
   /**
    * "Auto length": leave out the blank (white) rows or columns at the end along the paper feed, so the preview
