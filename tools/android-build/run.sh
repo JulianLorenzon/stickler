@@ -4,6 +4,11 @@
 #
 #   tools/android-build/run.sh                   unsigned release APK and app bundle: npm ci (if needed), vite build,
 #                                                cap sync, gradle
+#   tools/android-build/run.sh dev               test build for the phone ("Stickler dev", installs next to the Play
+#                                                version): vite build, cap sync, assembleDebug, then copied as
+#                                                stickler-<version>-dev.apk to $DEV_APK_DIR, else to the Windows
+#                                                Downloads folder under WSL; elsewhere it stays in android/app/build
+#   tools/android-build/run.sh check             type check (svelte-check, errors only), npm ci if needed
 #   tools/android-build/run.sh sign <keystore>   sign the APK with tools/sign-release.sh (apksigner asks for the password)
 #   tools/android-build/run.sh sign-bundle <keystore> <alias>   sign the app bundle with tools/sign-bundle.sh
 #   tools/android-build/run.sh <command...>      anything else, e.g. sh, or sh -c 'cd android && ./gradlew assembleDebug'
@@ -29,6 +34,11 @@ elif [ "$1" = sign-bundle ]; then
   ks=$(cd "$(dirname "$2")" && pwd)/$(basename "$2"); alias=$3; shift 3
   opts="$opts -v $ks:/keys/release.jks:ro"
   set -- tools/sign-bundle.sh /keys/release.jks "$alias"
+elif [ "$1" = check ]; then
+  set -- sh -c '[ -d node_modules ] || npm ci; npx svelte-check --tsconfig ./tsconfig.json --threshold error'
+elif [ "$1" = dev ]; then
+  dev=1
+  set -- sh -c '[ -d node_modules ] || npm ci; npm run build && npx cap sync android && cd android && ./gradlew -q assembleDebug'
 elif [ $# -eq 0 ]; then
   set -- sh -c '[ -d node_modules ] || npm ci; npm run build && npx cap sync android && cd android && ./gradlew assembleRelease bundleRelease'
 fi
@@ -42,3 +52,20 @@ fi
 
 # shellcheck disable=SC2086
 docker run --rm $opts -e COMMIT_HASH="$COMMIT_HASH" --user "$(id -u):$(id -g)" -v stickler-build-cache:/cache -v "$root:$root" -w "$root" $img "$@"
+
+if [ -n "$dev" ]; then
+  apk=$root/android/app/build/outputs/apk/debug/app-debug.apk
+  version=$(sed -n 's/^ *versionName "\(.*\)"/\1/p' "$root/android/app/build.gradle")
+  dir=$DEV_APK_DIR
+  if [ -z "$dir" ] && grep -qi microsoft /proc/version 2>/dev/null; then
+    # cmd.exe complains about a WSL path as its working directory, so it's started from C:
+    home=$(cd /mnt/c && cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
+    [ -n "$home" ] && dir=$(wslpath "$home")/Downloads
+  fi
+  if [ -n "$dir" ] && [ -d "$dir" ]; then
+    cp "$apk" "$dir/stickler-$version-dev.apk"
+    echo "$dir/stickler-$version-dev.apk ($COMMIT_HASH)"
+  else
+    echo "$apk ($COMMIT_HASH)"
+  fi
+fi

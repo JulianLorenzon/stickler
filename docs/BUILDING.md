@@ -94,6 +94,8 @@ Docker volume `stickler-build-cache`.
 
 ```bash
 tools/android-build/run.sh                              # unsigned release APK and app bundle (npm ci if needed, vite, cap sync, gradle)
+tools/android-build/run.sh check                        # type check (svelte-check)
+tools/android-build/run.sh dev                          # test build "Stickler dev" next to the Play version, copied to $DEV_APK_DIR (WSL: Windows Downloads)
 tools/android-build/run.sh sign path/to/release.jks     # sign the APK; apksigner asks for the password
 tools/android-build/run.sh sign-bundle path/to/release.jks <alias>   # sign the app bundle; jarsigner asks for the password
 tools/android-build/run.sh sh -c 'cd android && ./gradlew assembleDebug'   # any other command

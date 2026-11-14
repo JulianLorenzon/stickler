@@ -19,7 +19,7 @@ android {
     buildTypes {
         // A test build for the phone: own app ID and name ("Stickler dev"), so it installs next to the Play version
         // without replacing it; signed with the SDK's debug key, no password. Its labels are separate from the
-        // Play version's. Build: tools/android-build/run.sh sh -c 'cd android && ./gradlew assembleDebug'
+        // Play version's. Build: tools/android-build/run.sh dev
         debug {
             applicationIdSuffix ".dev"
             versionNameSuffix "-dev"
