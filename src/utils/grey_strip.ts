@@ -359,10 +359,14 @@ const rightOf = (n: Pt): Pt => [n[1], -n[0]];
  * A row with mark and code, given a point in solid ink that may be in its 100% patch and a guess of which way is
  * down the row. Undefined when there's no such row there.
  *
- * The patch's top, bottom and right edge place the right end of the row and give the scale; the mark is looked for
- * along the row where that puts it, and its edges place the left end. The row then runs from mark to patch. A tilted
- * phone sees one end bigger than the other and the patches in between unevenly spaced: the heights of mark and
- * patch say by how much, so the row is laid out in perspective.
+ * The patch's top, bottom and right edge give the scale across the row and a first guess of its right end; the mark
+ * is looked for along the row where that puts it, and its edges place the left end. The row then runs from the
+ * middle of the mark to the patch's right edge, and the patch's middle is where the layout puts it between those
+ * two: the scale along the row comes from its length alone. It can be well off the scale across the row (a phone
+ * held at a slant from further away, a camera that hands out stretched frames, a print that came out short), and
+ * half a patch's width taken from its height then puts every box on the edge of its patch. A tilted phone also sees
+ * one end bigger than the other and the patches in between unevenly spaced: the heights of mark and patch say by how
+ * much, so the row is laid out in perspective.
  */
 const readCodedRow = (
   L: Float32Array,
@@ -416,8 +420,13 @@ const readCodedRow = (
 
   let n = down;
   let left: Pt | undefined, right: Pt | undefined, leftH = 0, rightH = 0;
-  // Twice: the second time with "down" square to the row found the first time, instead of the blob's own direction
+  /** Photo pixels per dot along the row, against the same across it: unknown the first time round */
+  let stretch = 1;
+  // Twice: the second time with "down" square to the row found the first time, instead of the blob's own direction,
+  // and with the row's length known
   for (let pass = 0; pass < 2; pass++) {
+    // How far off the scale across the row the scale along it may be
+    const loose = pass === 0 ? 1.6 : 1.15;
     const from: Pt = right ?? start;
     // `reach`: how far the patch's edges can be from a point inside it, photo pixels
     const far = reach;
@@ -448,14 +457,17 @@ const readCodedRow = (
     const u = rightOf(n);
     const mid = add(from, n, (dn - up) / 2);
     // The patch's left edge runs into the 90% patch; its right edge is clean
-    const toEdge = edge(mid, u, rightH * 0.25, lay.pw * s * 1.5 + 4);
+    const sAlong = s * stretch;
+    const toEdge = edge(mid, u, rightH * 0.25, lay.pw * sAlong * loose * 1.5 + 4);
     if (toEdge === undefined) return undefined;
-    right = add(mid, u, toEdge - (lay.pw * s) / 2);
+    const rightEdge = add(mid, u, toEdge);
+    right = add(mid, u, toEdge - (lay.pw * sAlong) / 2);
 
     // The mark along the row as guessed from this end: a dark stretch about as long as the mark is wide, with paper
     // on both sides. The guess can be well off at that end, so this looks from left of the mark to a few patches in
-    const guess: Mapper = (sx, sy) => add(add(right!, u, (sx - ax) * s), n, (sy - cy) * s);
-    const step = 0.5, first = markX - 60, end = markX + 90;
+    const guess: Mapper = (sx, sy) => add(add(right!, u, (sx - ax) * sAlong), n, (sy - cy) * s);
+    // The first time the row can be a good deal longer or shorter than the patch's height says
+    const step = 0.5, first = pass === 0 ? markX - 0.45 * (ax - markX) : markX - 30, end = pass === 0 ? markX + 0.45 * (ax - markX) : markX + 30;
     const profile: number[] = [];
     for (let sx = first; sx <= end; sx += step) {
       let sum = 0, cnt = 0;
@@ -472,7 +484,7 @@ const readCodedRow = (
       let j = i;
       while (j + 1 < profile.length && profile[j + 1] < darkBelow * 1.3) j++;
       const length = (j - i + 1) * step;
-      if (i > 0 && length > lay.markW * 0.5 && length < lay.markW * 1.8 && around(i - 8) > 0.65 * paper && around(j + 5) > 0.65 * paper) {
+      if (i > 0 && length > (lay.markW * 0.5) / loose && length < lay.markW * 1.8 * loose && around(i - 8) > 0.65 * paper && around(j + 5) > 0.65 * paper) {
         found = first + ((i + j) / 2) * step;
       }
       i = j;
@@ -486,10 +498,21 @@ const readCodedRow = (
     leftH = mUp + mDn;
     if (leftH < 0.6 * rightH || leftH > 1.6 * rightH) return undefined;
     const mMid = add(inMark, n, (mDn - mUp) / 2);
-    const mL = edge(mMid, [-u[0], -u[1]], leftH * 0.25, lay.markW * s * 2), mR = edge(mMid, u, leftH * 0.25, lay.markW * s * 2);
+    const mFar = lay.markW * sAlong * loose * 2;
+    const mL = edge(mMid, [-u[0], -u[1]], leftH * 0.25, mFar), mR = edge(mMid, u, leftH * 0.25, mFar);
     if (mL === undefined || mR === undefined) return undefined;
-    if (mL + mR < lay.markW * s * 0.5 || mL + mR > lay.markW * s * 1.8) return undefined;
+    if (mL + mR < (lay.markW * sAlong * 0.5) / loose || mL + mR > lay.markW * sAlong * 1.8 * loose) return undefined;
     left = add(mMid, u, (mR - mL) / 2);
+
+    // The row from the middle of the mark to the patch's right edge, in perspective (as `toPhoto` below): the
+    // patch's middle is at 1 of the way, its right edge a little past that
+    const ratio = leftH / rightH;
+    const aEdge = (ax + lay.pw / 2 - markX) / (ax - markX);
+    const tEdge = (ratio * aEdge) / (1 + (ratio - 1) * aEdge);
+    right = add(left, [rightEdge[0] - left[0], rightEdge[1] - left[1]], 1 / tEdge);
+    // Twice the scale of the row's two ends over their sum is its scale where the patches are evenly spaced
+    stretch = Math.hypot(right[0] - left[0], right[1] - left[1]) / (ax - markX) / ((2 * leftH * rightH) / (leftH + rightH) / patchH);
+    if (stretch < 1 / 1.6 || stretch > 1.6) return undefined;
 
     const along = unit([right[0] - left[0], right[1] - left[1]]);
     const square: Pt = [-along[1], along[0]];

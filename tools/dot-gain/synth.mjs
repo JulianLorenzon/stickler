@@ -35,11 +35,19 @@ const printRow = (W, H, mode, corrected = false) => {
 
 /**
  * A sheet: pieces of paper (x, y, w, h in dots, with printed rows on them) on a dark table, seen by a camera.
- * view: scale (px per dot at the middle), kx/ky (tilt), turn (degrees), curl (dots).
+ * view: scale (px per dot at the middle), kx/ky (tilt), turn (degrees), curl (dots), along (the scale along the rows
+ * against the scale across them: a phone held at a slant from far away, or a camera that hands out stretched frames).
  */
-const photo = (sheet, { scale, kx = 0, ky = 0, turn = 0, curl = 0 }) => {
-  const w = 1080, h = 1920, data = new Uint8Array(w * h * 4).fill(255);
+const W_PX = 1080, H_PX = 1920;
+/** Where frame pixel (X, Y) is on the sheet, dots */
+const toSheet = (sheet, { scale, kx = 0, ky = 0, turn = 0, curl = 0, along = 1 }, X, Y) => {
   const c = Math.cos(turn * Math.PI / 180), s = Math.sin(turn * Math.PI / 180);
+  const dx = X - W_PX / 2, dy = Y - H_PX / 2, d = scale * (1 + kx * dx / (W_PX / 2) + ky * dy / (H_PX / 2));
+  const qy = (-s * dx + c * dy) / d;
+  return [sheet.w / 2 + (c * dx + s * dy) / d / along + curl * Math.sin(Math.PI * qy / sheet.h), sheet.h / 2 + qy];
+};
+const photo = (sheet, view) => {
+  const w = W_PX, h = H_PX, data = new Uint8Array(w * h * 4).fill(255);
   const at = (sx, sy) => {
     for (const p of sheet.pieces) {
       if (sx < p.x || sx >= p.x + p.w || sy < p.y || sy >= p.y + p.h) continue;
@@ -54,11 +62,9 @@ const photo = (sheet, { scale, kx = 0, ky = 0, turn = 0, curl = 0 }) => {
   for (let Y = 0; Y < h; Y++) for (let X = 0; X < w; X++) {
     let sum = 0;
     for (const [ox, oy] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3], [0, 0]]) {
-      const dx = X + ox - w / 2, dy = Y + oy - h / 2, d = scale * (1 + kx * dx / (w / 2) + ky * dy / (h / 2));
-      const qy = (-s * dx + c * dy) / d, sy = sheet.h / 2 + qy;
-      const sx = sheet.w / 2 + (c * dx + s * dy) / d + curl * Math.sin(Math.PI * qy / sheet.h);
+      const [sx, sy] = toSheet(sheet, view, X + ox, Y + oy);
       const v = at(sx, sy);
-      sum += v === undefined ? 45 : 205 * (1 + 0.1 * dx / (w / 2)) * v;
+      sum += v === undefined ? 45 : 205 * (1 + 0.1 * (X + ox - w / 2) / (w / 2)) * v;
     }
     data.fill(sum / 5, (Y * w + X) * 4, (Y * w + X) * 4 + 3);
   }
@@ -68,13 +74,13 @@ const photo = (sheet, { scale, kx = 0, ky = 0, turn = 0, curl = 0 }) => {
 /** MXW01: four rows in one piece on the 57 mm roll */
 const roll = () => {
   const W = 384, H = 112, rows = [0, 1, 2, 3].map((m) => ({ ...printRow(W, H, m), W, H, x: 36, y: 70 + m * H }));
-  return { W, H, w: W + 72, h: 4 * H + 130, pieces: [{ x: 0, y: 0, w: W + 72, h: 4 * H + 130, rows }], truth: rows.map((r) => r.truth) };
+  return { W, H, w: W + 72, h: 4 * H + 130, pieces: [{ x: 0, y: 0, w: W + 72, h: 4 * H + 130, rows }], truth: rows.map((r) => r.truth), at: rows.map((r) => [r.x, r.y]) };
 };
 /** D11s: a label each (print area W x 96 on a 14 mm label), `modes` of them one under the other on the liner */
 const labels = (mm, modes = [0, 1, 2, 3]) => {
   const W = mm * 8 - 8, H = 96, lw = mm * 8, lh = 112, pitch = lh + 24;
   const pieces = modes.map((m, i) => ({ x: 20, y: 20 + i * pitch, w: lw, h: lh, rows: [{ ...printRow(W, H, m), W, H, x: 8, y: 8 }] }));
-  return { W, H, w: lw + 40, h: modes.length * pitch + 16, pieces, truth: Object.fromEntries(modes.map((m, i) => [m, pieces[i].rows[0].truth])) };
+  return { W, H, w: lw + 40, h: modes.length * pitch + 16, pieces, truth: Object.fromEntries(modes.map((m, i) => [m, pieces[i].rows[0].truth])), at: Object.fromEntries(modes.map((m, i) => [m, [pieces[i].x + 8, pieces[i].y + 8]])) };
 };
 
 const check = (name, sheet, view) => {
@@ -82,12 +88,20 @@ const check = (name, sheet, view) => {
   const r = M.readGreyStrip(frame, sheet.W, sheet.H);
   if (typeof r === "string") { console.log("  " + name.padEnd(46), "FAILED:", r); return frame; }
   const diffs = r.rows.flatMap((row) => row.measured.map((v, j) => Math.abs(v - sheet.truth[row.mode][j])));
+  // How far the measured boxes are from the middle of their patches, along the row and across it (dots)
+  const lay = M.greyRowLayout(sheet.W, sheet.H);
+  let off = 0;
+  for (const row of r.rows) row.patchBoxes.forEach((q, i) => {
+    const [sx, sy] = toSheet(sheet, view, (q[0][0] + q[2][0]) / 2, (q[0][1] + q[2][1]) / 2);
+    const [rx, ry] = sheet.at[row.mode];
+    off = Math.max(off, Math.abs(sx - rx - (lay.x0 + i * (lay.pw + lay.gap) + lay.pw / 2)), Math.abs(sy - ry - (lay.top + lay.bottom) / 2));
+  });
   let fit = "";
   if (r.complete) {
     const f = M.fitDotModel([{ measured: r.measured, marks: r.marks }], sheet.W, sheet.H, M.D11S_DOT_MODEL);
     fit = `, fit rms ${f.rms.toFixed(3)} ${JSON.stringify(f.model)}`;
   }
-  console.log("  " + name.padEnd(46), `rows ${r.rows.map((x) => x.mode).join("")}, ${r.scale.toFixed(2)} px/dot, worst patch ${Math.max(...diffs).toFixed(3)}, mean ${(diffs.reduce((a, b) => a + b, 0) / diffs.length).toFixed(3)}${fit}`);
+  console.log("  " + name.padEnd(46), `rows ${r.rows.map((x) => x.mode).join("")}, ${r.scale.toFixed(2)} px/dot, boxes off by up to ${off.toFixed(1)} dots, worst patch ${Math.max(...diffs).toFixed(3)}, mean ${(diffs.reduce((a, b) => a + b, 0) / diffs.length).toFixed(3)}${fit}`);
   return frame;
 };
 
@@ -109,6 +123,13 @@ check("30 mm, four labels, tilted", labels(30), { scale: 2.6, kx: 0.08, ky: -0.0
 check("50 mm, four labels, tilted", labels(50), { scale: 1.8, kx: -0.08, ky: 0.05, turn: 3 });
 for (const m of [0, 3]) check(`40 mm, label ${m} alone, close, turned 20`, labels(40, [m]), { scale: 2.8, turn: 20, kx: 0.08 });
 check("30 mm, one label, small in the frame", labels(30, [2]), { scale: 1.1, turn: -10 });
+console.log("Rows squeezed or stretched along their length");
+check("40 mm, rows 0.72 as long", labels(40), { scale: 2.0, along: 0.72, turn: 4 });
+check("40 mm, rows 0.72 as long, small", labels(40), { scale: 1.7, along: 0.72, kx: 0.05 });
+check("40 mm, rows 1.35 as long", labels(40), { scale: 1.5, along: 1.35, turn: -5 });
+check("40 mm, rows 1.35 as long, along the frame", labels(40), { scale: 1.4, along: 1.35, turn: 90, ky: 0.05 });
+check("roll, rows 0.75 as long", R, { scale: 1.5, along: 0.75, kx: 0.08 });
+check("roll, rows 1.3 as long, turned 90", R, { scale: 1.2, along: 1.3, turn: 90 });
 for (const [file, f] of [[process.env.FRAME, frame], [process.env.FRAME_ROLL, rollFrame]]) {
   if (!file) continue;
   const head = Buffer.alloc(8);
