@@ -194,7 +194,7 @@
     "calibration.dots.title": "Korekcja punktów",
     "calibration.dots.intro": "Punkty termiczne się rozlewają, więc szarości drukują się ciemniej niż na ekranie. Zmierz drukarkę raz, a Stickler to wyrówna.",
     "calibration.step.print": "Wydrukuj test szarości",
-    "calibration.grey.what": "Jeden kawałek o szerokości {width} mm z rzędem szarości dla każdego trybu rastrowania.",
+    "calibration.grey.what": "Jeden kawałek o szerokości {width} mm z rzędem szarości dla każdego trybu rastrowania. Drukarki termiczne drukują ciemniej, gdy są rozgrzane: aby skalibrować pod kilka wydruków z rzędu, wydrukuj go dwa razy i zmierz drugi.",
     "calibration.grey.what.labels": "4 etykiety z szarościami, po jednej na tryb rastrowania.",
     "calibration.step.measure": "Zmierz wydruk",
     "calibration.measure.help": "Połóż go płasko w równym świetle dziennym, bez cieni. Aparat mierzy, gdy tylko widzi wszystkie rzędy.",

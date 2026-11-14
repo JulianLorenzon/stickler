@@ -194,7 +194,7 @@
     "calibration.dots.title": "Puntcorrectie",
     "calibration.dots.intro": "Thermische punten vloeien uit, dus grijs komt donkerder op papier dan op het scherm. Meet je printer één keer, dan corrigeert Stickler dat.",
     "calibration.step.print": "Druk de grijstest af",
-    "calibration.grey.what": "Eén stuk van {width} mm breed met een rij grijstinten per ditheringmodus.",
+    "calibration.grey.what": "Eén stuk van {width} mm breed met een rij grijstinten per ditheringmodus. Thermische printers printen donkerder als ze warm zijn: om te kalibreren voor meerdere prints achter elkaar, print je hem twee keer en meet je de tweede.",
     "calibration.grey.what.labels": "4 labels met grijstinten, één per ditheringmodus.",
     "calibration.step.measure": "Meet de test",
     "calibration.measure.help": "Leg hem vlak in gelijkmatig daglicht, zonder schaduwen. De camera meet zodra alle rijen in beeld zijn.",

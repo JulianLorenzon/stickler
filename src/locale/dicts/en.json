@@ -194,7 +194,7 @@
     "calibration.dots.title": "Dot correction",
     "calibration.dots.intro": "Thermal dots spread, so greys print darker than on screen. Measure your printer once and Stickler makes up for it.",
     "calibration.step.print": "Print the grey test",
-    "calibration.grey.what": "One {width} mm wide piece with a row of greys for each dither mode.",
+    "calibration.grey.what": "One {width} mm wide piece with a row of greys for each dither mode. Thermal printers print darker once warm: to calibrate for printing several things in a row, print it twice and measure the second.",
     "calibration.grey.what.labels": "4 labels with greys, one for each dither mode.",
     "calibration.step.measure": "Measure it",
     "calibration.measure.help": "Lay it flat in even daylight, without shadows. The camera measures as soon as all rows are in view.",

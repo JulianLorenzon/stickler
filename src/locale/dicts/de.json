@@ -194,7 +194,7 @@
     "calibration.dots.title": "Punktkorrektur",
     "calibration.dots.intro": "Thermopunkte laufen aus, deshalb druckt Grau dunkler als auf dem Bildschirm. Miss deinen Drucker einmal, dann gleicht Stickler das aus.",
     "calibration.step.print": "Drucke den Graustufentest",
-    "calibration.grey.what": "Ein {width} mm breites Stück mit einer Reihe Grautöne pro Dithering-Modus.",
+    "calibration.grey.what": "Ein {width} mm breites Stück mit einer Reihe Grautöne pro Dithering-Modus. Thermodrucker drucken warm dunkler: um für mehrere Drucke hintereinander zu kalibrieren, drucke ihn zweimal und miss den zweiten.",
     "calibration.grey.what.labels": "4 Etiketten mit Grautönen, eins pro Dithering-Modus.",
     "calibration.step.measure": "Miss den Test",
     "calibration.measure.help": "Lege ihn flach in gleichmäßiges Tageslicht, ohne Schatten. Die Kamera misst, sobald alle Reihen im Bild sind.",

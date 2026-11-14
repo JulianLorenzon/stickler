@@ -194,7 +194,7 @@
     "calibration.dots.title": "Corrección de puntos",
     "calibration.dots.intro": "Los puntos térmicos se expanden, así que los grises salen más oscuros que en pantalla. Mide tu impresora una vez y Stickler lo compensa.",
     "calibration.step.print": "Imprime la prueba de grises",
-    "calibration.grey.what": "Una pieza de {width} mm de ancho con una fila de grises por cada modo de tramado.",
+    "calibration.grey.what": "Una pieza de {width} mm de ancho con una fila de grises por cada modo de tramado. Las impresoras térmicas imprimen más oscuro cuando están calientes: para calibrar para varias impresiones seguidas, imprímela dos veces y mide la segunda.",
     "calibration.grey.what.labels": "4 etiquetas con grises, una por modo de tramado.",
     "calibration.step.measure": "Mide la prueba",
     "calibration.measure.help": "Ponla plana con luz de día uniforme, sin sombras. La cámara mide en cuanto ve todas las filas.",
