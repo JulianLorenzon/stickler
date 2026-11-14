@@ -1,40 +1,40 @@
 <script lang="ts">
   import AppModal from "$/components/basic/AppModal.svelte";
-  import MdIcon from "$/components/basic/MdIcon.svelte";
   import CalibrationSection from "$/components/CalibrationSection.svelte";
-  import { connectedPrinterName, connectionState, printerMeta, printerSheetOpen } from "$/stores";
+  import { DRIVERS, driverById, type PrinterModelMeta } from "$/lib/printer";
+  import { connectedPrinterName, connectionState, designPrinter, printerMeta } from "$/stores";
   import { tr } from "$/utils/i18n";
 
-  /** The calibration test prints, opened from the app menu. They need a connected printer. */
+  /**
+   * The calibration of a printer, opened from the app menu: the connected one, else the last one used, which can be
+   * switched. Measuring and the saved corrections work without a printer; only the test prints need one.
+   */
   let { show = $bindable() }: { show: boolean } = $props();
+
+  const connected = $derived($connectionState === "connected" && $printerMeta !== undefined);
+  const meta = $derived<PrinterModelMeta>(connected ? $printerMeta! : driverById($designPrinter).meta({}));
 </script>
 
 <AppModal title={$tr("calibration.title")} variant="fullscreen" bind:show>
-  {#if $connectionState === "connected" && $printerMeta}
+  {#if connected}
     <div class="printer-line">
       <span class="status-dot ok"></span>
-      <span class="text-truncate">{$printerMeta.model || $connectedPrinterName}</span>
+      <span class="text-truncate">{meta.model || $connectedPrinterName}</span>
     </div>
-    <CalibrationSection meta={$printerMeta} />
   {:else}
-    <div class="no-printer">
-      <div class="avatar"><MdIcon icon="print" /></div>
-      <p class="text-secondary">{$tr("calibration.no_printer")}</p>
-      <!-- The printer sheet opens over this page and closes itself once a printer is connected -->
-      <button
-        class="btn btn-primary btn-lg w-100"
-        disabled={$connectionState === "connecting"}
-        onclick={() => ($printerSheetOpen = true)}>
-        {#if $connectionState === "connecting"}
-          <span class="spinner-border spinner-border-sm"></span>
-          {$tr("connector.status.connecting")}
-        {:else}
-          <MdIcon icon="bluetooth" />
-          {$tr("connector.connect")}
-        {/if}
-      </button>
+    <div class="printer-switch" role="group" aria-label={$tr("params.label.printer")}>
+      {#each DRIVERS as d (d.id)}
+        <button
+          class="btn {meta.driver === d.id ? 'btn-primary' : 'btn-outline-secondary'}"
+          aria-pressed={meta.driver === d.id}
+          onclick={() => designPrinter.set(d.id)}>{d.displayName}</button>
+      {/each}
     </div>
+    <p class="offline">{$tr("calibration.offline")}</p>
   {/if}
+  {#key meta.driver}
+    <CalibrationSection {meta} {connected} />
+  {/key}
 </AppModal>
 
 <style>
@@ -47,20 +47,20 @@
     margin-bottom: 0.25rem;
   }
 
-  .no-printer {
-    text-align: center;
-    padding: 2rem 0.5rem;
+  .printer-switch {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 0.25rem;
   }
 
-  .avatar {
-    width: 4rem;
-    height: 4rem;
-    margin: 0 auto 1rem;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    font-size: 1.4rem;
-    background: var(--accent-subtle);
-    color: var(--accent);
+  .printer-switch .btn {
+    min-height: 2.75rem;
+  }
+
+  .offline {
+    font-size: 0.8125rem;
+    color: var(--ink-secondary);
+    margin: 0.5rem 0 0;
   }
 </style>

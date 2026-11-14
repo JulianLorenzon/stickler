@@ -15,7 +15,8 @@
     werness,
     applyCurve,
   } from "$/utils/post_process";
-  import { D11S_DOT_MODEL, dotModelFor, simulatePrint } from "$/utils/print_sim";
+  import { D11S_DOT_MODEL, simulatePrint } from "$/utils/print_sim";
+  import { dotModelFor } from "$/utils/calibrations";
   import * as fabric from "fabric";
   import {
     type EncodedImage,

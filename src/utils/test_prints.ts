@@ -16,20 +16,21 @@ import {
   greyRowLayout,
   greyTitleRoom,
 } from "$/utils/grey_strip";
-import { dotGainCurve, dotModelFor } from "$/utils/print_sim";
+import { dotGainCurve, type DotModel } from "$/utils/print_sim";
+import { dotModelFor } from "$/utils/calibrations";
 
 export { GREY_TEST_MODES };
 
 /**
  * The dot gain correction for a printer and dither mode, or undefined when the printer has no dot model or the mode
- * doesn't dither. `thresholdValue` is the slider, which Atkinson and Bayer use.
+ * doesn't dither. `thresholdValue` is the slider, which Atkinson and Bayer use. `m` is the model in use unless given.
  */
 export const dotGainCurveFor = (
   printer: PrinterId,
   mode: PostProcessType,
   thresholdValue: number,
+  m: DotModel | undefined = dotModelFor(printer),
 ): Uint8ClampedArray | undefined => {
-  const m = dotModelFor(printer);
   if (!m) return undefined;
   const p = printer;
   switch (mode) {

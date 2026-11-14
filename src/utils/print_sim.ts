@@ -54,43 +54,6 @@ const DOT_MODELS: Partial<Record<PrinterId, DotModel>> = { d11s: D11S_DOT_MODEL,
 
 export const builtInDotModel = (printer: PrinterId): DotModel | undefined => DOT_MODELS[printer];
 
-/** Models fitted on this phone from a photo of the grey test (printer sheet, Calibration); they go before ours */
-const OWN_MODELS_KEY = "dot_models";
-let ownModels: Partial<Record<PrinterId, DotModel>> | undefined;
-
-const loadOwnModels = (): Partial<Record<PrinterId, DotModel>> => {
-  if (ownModels) return ownModels;
-  ownModels = {};
-  try {
-    const stored = JSON.parse(localStorage.getItem(OWN_MODELS_KEY) ?? "{}");
-    for (const printer of Object.keys(DOT_MODELS) as PrinterId[]) {
-      const m = stored[printer];
-      const keys = ["base", "orth", "diag", "spillOrth", "spillDiag"] as const;
-      if (m && keys.every((k) => typeof m[k] === "number" && m[k] >= 0 && m[k] <= 1)) {
-        ownModels[printer] = Object.fromEntries(keys.map((k) => [k, m[k]])) as unknown as DotModel;
-      }
-    }
-  } catch (e) {
-    console.warn("Stored dot models unreadable:", e);
-  }
-  return ownModels;
-};
-
-export const ownDotModel = (printer: PrinterId): DotModel | undefined => loadOwnModels()[printer];
-
-/** Keeps a model fitted on this phone for `printer`, or with no model goes back to the built-in one */
-export const setOwnDotModel = (printer: PrinterId, model?: DotModel) => {
-  const all = { ...loadOwnModels() };
-  if (model) all[printer] = model;
-  else delete all[printer];
-  localStorage.setItem(OWN_MODELS_KEY, JSON.stringify(all));
-  ownModels = all;
-  // The cached curves were made for the model before
-  curves.clear();
-};
-
-export const dotModelFor = (printer: PrinterId): DotModel | undefined => ownDotModel(printer) ?? DOT_MODELS[printer];
-
 /** Paper and ink colours of the Fichero labels, for drawing the simulation */
 const PAPER = [244, 240, 234];
 const INK = [59, 42, 40];
@@ -135,14 +98,16 @@ const curves = new Map<string, Uint8ClampedArray>();
 
 /**
  * A grey → grey table that undoes the dot model for one dither: it measures how dark flat patches come out after
- * `dither` and the model, then for each grey picks the input that prints as that grey. Cached per `key`.
+ * `dither` and the model, then for each grey picks the input that prints as that grey. Cached per `key` and model.
  */
 export const dotGainCurve = (
   key: string,
   dither: (image: ImageData) => ImageData,
   m: DotModel = D11S_DOT_MODEL,
 ): Uint8ClampedArray => {
-  const cached = curves.get(key);
+  // The model is part of the key: switching between calibrations must not reuse another one's curve
+  const cacheKey = `${key}|${m.base}|${m.orth}|${m.diag}|${m.spillOrth}|${m.spillDiag}`;
+  const cached = curves.get(cacheKey);
   if (cached) return cached;
 
   // Printed darkness for coverage i / CURVE_STEPS, kept rising so it can be inverted
@@ -170,6 +135,55 @@ export const dotGainCurve = (
   lut[0] = 0;
   lut[255] = 255;
 
-  curves.set(key, lut);
+  curves.set(cacheKey, lut);
   return lut;
+};
+
+/** Steps of the tone curves: every 5% */
+export const TONE_STEPS = 20;
+const TONE_PATCH = 48;
+/** Burnt dots and their neighbours per grey and dither, which the tone curve of any model is made from */
+const toneCounts = new Map<string, Float64Array[]>();
+
+/**
+ * How dark each grey prints with `dither` and model `m`, without correction: darkness relative to solid black for
+ * 0, 5, .. 100% grey, as the grey test measures it. The dithered patches are worked out once per `key`; a model
+ * then costs next to nothing, so a chart can draw several.
+ */
+export const toneCurve = (key: string, dither: (image: ImageData) => ImageData, m: DotModel): number[] => {
+  let counts = toneCounts.get(key);
+  if (!counts) {
+    counts = [];
+    for (let i = 0; i <= TONE_STEPS; i++) {
+      const grey = Math.round(255 * (1 - i / TONE_STEPS));
+      const patch = new ImageData(TONE_PATCH, TONE_PATCH);
+      for (let p = 0; p < patch.data.length; p += 4) patch.data.fill(grey, p, p + 3), (patch.data[p + 3] = 255);
+      const { data } = dither(patch);
+      const at = (x: number, y: number) => (data[(y * TONE_PATCH + x) * 4] < 128 ? 1 : 0);
+      // 0-24: empty dot by burnt neighbours side by side (x5) and diagonal; 25-49 the same for a burnt dot. The
+      // border is left out: outside the patch counts as empty, which a flat grey doesn't have
+      const c = new Float64Array(50);
+      for (let y = 2; y < TONE_PATCH - 2; y++) {
+        for (let x = 2; x < TONE_PATCH - 2; x++) {
+          const orth = at(x - 1, y) + at(x + 1, y) + at(x, y - 1) + at(x, y + 1);
+          const diag = at(x - 1, y - 1) + at(x + 1, y - 1) + at(x - 1, y + 1) + at(x + 1, y + 1);
+          c[at(x, y) * 25 + orth * 5 + diag]++;
+        }
+      }
+      counts.push(c);
+    }
+    toneCounts.set(key, counts);
+  }
+  const dark = counts.map((c) => {
+    let sum = 0, n = 0;
+    for (let k = 0; k < 50; k++) {
+      if (c[k] === 0) continue;
+      const orth = ((k % 25) / 5) | 0, diag = k % 5;
+      sum += c[k] * Math.min(1, k >= 25 ? m.base + m.orth * orth + m.diag * diag : m.spillOrth * orth + m.spillDiag * diag);
+      n += c[k];
+    }
+    return sum / n;
+  });
+  const solid = dark[TONE_STEPS] || 1;
+  return dark.map((d) => d / solid);
 };

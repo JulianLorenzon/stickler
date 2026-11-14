@@ -1,16 +1,19 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import type { PrinterModelMeta } from "$/lib/printer";
-  import { appConfig, printerClient } from "$/stores";
+  import { appConfig, printerClient, printerSheetOpen } from "$/stores";
   import type { PreviewProps, PreviewPropsOffset } from "$/types";
-  import { DOTS_PER_MM } from "$/defaults";
+  import { DOTS_PER_MM, ROLLS, labelPropsForPreset, printerOf } from "$/defaults";
   import { tr } from "$/utils/i18n";
   import { LocalStoragePersistence } from "$/utils/persistence";
   import { fitDotModel, GREY_TEST_MODES, readGreyLabels, readGreyStrip, type DotFit } from "$/utils/grey_strip";
-  import { builtInDotModel, D11S_DOT_MODEL, dotModelFor, ownDotModel, setOwnDotModel } from "$/utils/print_sim";
+  import { builtInDotModel, D11S_DOT_MODEL } from "$/utils/print_sim";
+  import { activeCalibration, calibrations, saveCalibration } from "$/utils/calibrations";
   import { captureGreyStrip, rowPicture, stackPictures, stripCameraAvailable } from "$/utils/strip_camera";
   import { Toasts } from "$/utils/toasts";
   import { Utils } from "$/lib/printer";
   import {
+    dotGainCurveFor,
     drawOffsetLabel,
     formatMm,
     GREY_ROW,
@@ -20,23 +23,27 @@
     printTestImage,
     testLabelFor,
     withOffset,
+    type TestLabel,
     type TestPrintOptions,
   } from "$/utils/test_prints";
   import MdIcon from "$/components/basic/MdIcon.svelte";
+  import DotPatch from "$/components/DotPatch.svelte";
+  import CorrectionsSection from "$/components/CorrectionsSection.svelte";
 
-  /** Test prints for the connected printer, as steps on the calibration page */
-  let { meta }: { meta: PrinterModelMeta } = $props();
+  /**
+   * Calibration of a printer as steps: test prints (when it's connected), measuring them and the corrections kept on
+   * this phone
+   */
+  let { meta, connected }: { meta: PrinterModelMeta; connected: boolean } = $props();
 
   const printer = $derived(meta.driver);
   const gaps = $derived(hasLabelGaps(meta));
-  /** Bumped when a correction measured here is saved or dropped, since the models live outside Svelte */
-  let modelVersion = $state(0);
-  const hasModel = $derived(modelVersion >= 0 && dotModelFor(printer) !== undefined);
-  const hasOwnModel = $derived(modelVersion >= 0 && ownDotModel(printer) !== undefined);
+  /** The correction a corrected grey test prints with: the one in use */
+  const activeModel = $derived(activeCalibration(printer, $calibrations)?.model ?? builtInDotModel(printer));
+  const activeSaved = $derived(activeCalibration(printer, $calibrations));
 
   /** The test print being sent, so its button shows the spinner */
-  let busy = $state<"grey" | "offset" | undefined>();
-  let corrected = $state(false);
+  let busy = $state<"grey" | "corrected" | "offset" | undefined>();
   let offsetStep = $state<number>(DOTS_PER_MM);
   /** Offsets of the last printed strip, to pick from */
   let offsetsPrinted = $state<number[]>([]);
@@ -62,7 +69,54 @@
     };
   };
 
-  const testLabel = () => testLabelFor(printer, meta, LocalStoragePersistence.loadLastLabelProps());
+  const designerLabel = $derived(testLabelFor(printer, meta, LocalStoragePersistence.loadLastLabelProps()));
+
+  /** A label size to print the grey test on: the design area in dots and the piece of paper it's on */
+  interface SizeOption {
+    width: number;
+    height: number;
+    paper: { width: number; height: number };
+  }
+
+  /**
+   * Label sizes to print the grey test on (labels with gaps): the rolls sold for the printer and the user's own sizes,
+   * and the label open in the designer if it's none of those
+   */
+  const sizeOptions = $derived.by((): SizeOption[] => {
+    if (!gaps) return [];
+    let presets = ROLLS[printer];
+    try {
+      presets = [...presets, ...(LocalStoragePersistence.loadLabelPresets() ?? [])];
+    } catch {
+      // Unreadable sizes: the rolls are enough
+    }
+    const options: SizeOption[] = presets
+      .filter(
+        (p) =>
+          printerOf(p) === printer &&
+          p.printDirection === meta.printDirection &&
+          !p.autoLength &&
+          (p.shape ?? "rect") !== "circle" &&
+          (p.split ?? "none") === "none",
+      )
+      .map((p) => labelPropsForPreset(p, meta.printheadPixels))
+      .map((lp) => ({ ...lp.size, paper: lp.paper ?? lp.size }));
+    const designer = LocalStoragePersistence.loadLastLabelProps();
+    if (designer && printerOf(designer) === printer && designer.printDirection === meta.printDirection) {
+      options.push({ ...designer.size, paper: designer.paper ?? designer.size });
+    }
+    const unique = options.filter(
+      (o, i) => options.findIndex((p) => p.width === o.width && p.height === o.height) === i && o.width >= 16 * DOTS_PER_MM,
+    );
+    return unique.sort((a, b) => a.paper.width - b.paper.width || a.paper.height - b.paper.height);
+  });
+
+  /** The label size picked for the grey test: the designer's to begin with */
+  let size = $state<{ width: number; height: number }>(untrack(() => ({ width: designerLabel.width, height: designerLabel.height })));
+  const sizeText = (o: SizeOption) => `${Number((o.paper.width / DOTS_PER_MM).toFixed(1))}×${Number((o.paper.height / DOTS_PER_MM).toFixed(1))}`;
+
+  /** The grey test's label: the size picked here on labels with gaps; a roll as wide as the head */
+  const testLabel = (): TestLabel => (gaps ? { ...size, direction: designerLabel.direction } : designerLabel);
 
   /**
    * The label size the grey test was last printed on, per printer: what a photo of it is read as, whatever label is
@@ -89,7 +143,7 @@
     if (delay !== undefined && delay > 0 && index < total - 1) await Utils.sleep(delay);
   };
 
-  const printPages = async (what: "grey" | "offset", pages: HTMLCanvasElement[], opts: TestPrintOptions) => {
+  const printPages = async (what: NonNullable<typeof busy>, pages: HTMLCanvasElement[], opts: TestPrintOptions) => {
     busy = what;
     try {
       for (let i = 0; i < pages.length; i++) {
@@ -104,13 +158,26 @@
     }
   };
 
-  const printGreyTest = () => {
+  const printGreyTest = (corrected: boolean) => {
     const label = testLabel();
-    const pages = greyTestPages(printer, meta, label, corrected && hasModel);
+    const pages = greyTestPages(printer, meta, label, corrected && activeModel !== undefined);
     if (gaps) rememberPrinted(label);
     // The offset is for labels; a strip on a roll prints as it is
-    return printPages("grey", gaps ? pages.map((p) => withOffset(p, offset)) : pages, printOptions(label));
+    const what = corrected ? "corrected" : "grey";
+    return printPages(what, gaps ? pages.map((p) => withOffset(p, offset)) : pages, printOptions(label));
   };
+
+  const connect = () => ($printerSheetOpen = true);
+
+  /** The dither the chart and the dot patches show: the print preview's when it's one on the grey test */
+  const modeOfPreview = (): number => {
+    const mode = loadPreviewProps().postProcess;
+    const i = GREY_TEST_MODES.findIndex((m) => m.mode === (mode === "smart" ? "dither" : mode));
+    return Math.max(0, i);
+  };
+  let modeIndex = $state(modeOfPreview());
+  const patchMode = $derived(GREY_TEST_MODES[modeIndex]);
+  const patchCurve = $derived(activeModel ? dotGainCurveFor(printer, patchMode.mode, 128, activeModel) : undefined);
 
   const printOffsetStrip = () => {
     const label = testLabel();
@@ -126,7 +193,17 @@
   let measuring = $state(false);
   let photoMessage = $state("");
   /** The photo with the measured boxes drawn in, and the model fitted to it */
-  let photoResult = $state<{ overlay: string; fit: DotFit; uneven: boolean } | undefined>();
+  interface MeasuredResult {
+    overlay: string;
+    fit: DotFit;
+    uneven: boolean;
+    measured: number[][];
+    size: { width: number; height: number };
+    source: "camera" | "photo";
+  }
+  let photoResult = $state<MeasuredResult | undefined>();
+  /** The correction looked at in the list below */
+  let picked = $state<string | undefined>();
 
   /**
    * The rows of the grey test as it prints now: the label that's open in the designer (labels with gaps, a row on
@@ -142,15 +219,23 @@
     const printed = gaps ? printedSizes()[printer] : undefined;
     return printed && printed.width > 0 && printed.height > 0 ? { width: printed.width, height: printed.height } : rowSize();
   };
-  const paperText = $derived.by(() => {
+  const rollText = $derived.by(() => {
     const { width, height } = rowSize();
     return `${Number((width / DOTS_PER_MM).toFixed(1))} × ${Number((height / DOTS_PER_MM).toFixed(1))} mm`;
   });
 
   /** Fit this printer's dot model to a measured grey test (printed without correction) and show what came of it */
-  const showFit = (measured: number[][], marks: boolean, width: number, height: number, overlay: string, paperEvenness: number) => {
+  const showFit = (
+    source: MeasuredResult["source"],
+    measured: number[][],
+    marks: boolean,
+    width: number,
+    height: number,
+    overlay: string,
+    paperEvenness: number,
+  ) => {
     const fit = fitDotModel([{ measured, marks }], width, height, builtInDotModel(printer) ?? D11S_DOT_MODEL);
-    photoResult = { overlay, fit, uneven: paperEvenness < 0.75 };
+    photoResult = { overlay, fit, uneven: paperEvenness < 0.75, measured, size: { width, height }, source };
   };
 
   /** Read the grey test with our own camera screen, which measures as soon as the strip is in view */
@@ -160,7 +245,7 @@
     try {
       const { width, height } = readSize();
       const capture = await captureGreyStrip(width, height, gaps ? 1 : GREY_TEST_MODES.length);
-      if (capture) showFit(capture.measured, capture.marks, capture.width, height, capture.overlay, capture.paperEvenness);
+      if (capture) showFit("camera", capture.measured, capture.marks, capture.width, height, capture.overlay, capture.paperEvenness);
     } catch (e) {
       console.error(e);
       photoMessage = $tr((e as Error)?.name === "NotAllowedError" ? "editor.scan.no_permission" : "editor.scan.no_camera");
@@ -197,7 +282,7 @@
       }
       const { width } = reading;
       const overlay = stackPictures(reading.rows.map((row) => rowPicture(canvas, row, width, height)));
-      showFit(reading.measured, reading.marks, width, height, overlay, reading.paperEvenness);
+      showFit("photo", reading.measured, reading.marks, width, height, overlay, reading.paperEvenness);
     } catch (e) {
       console.error(e);
       photoMessage = $tr("calibration.auto.failed");
@@ -217,21 +302,18 @@
     input.click();
   };
 
-  const useMeasured = () => {
+  /** Keeps the measured correction in the list below, and uses it from now on with `use` */
+  const keepMeasured = (use: boolean) => {
     if (!photoResult) return;
     try {
-      setOwnDotModel(printer, photoResult.fit.model);
-      modelVersion++;
+      const { fit, measured, size, source } = photoResult;
+      const saved = saveCalibration(printer, { date: Date.now(), model: fit.model, rms: fit.rms, measured, size, source }, use);
       photoResult = undefined;
-      Toasts.message($tr("calibration.auto.saved"));
+      picked = saved.id;
+      Toasts.message($tr(use ? "calibration.auto.saved" : "calibration.auto.kept"));
     } catch (e) {
       Toasts.error(e);
     }
-  };
-
-  const dropMeasured = () => {
-    setOwnDotModel(printer);
-    modelVersion++;
   };
 
   /** An offset picked from a test strip is a calibration: the print preview uses it from now on */
@@ -252,27 +334,56 @@
 
   <div class="step">
     <div class="step-head"><span class="num">1</span>{$tr("calibration.step.print")}</div>
-    <p class="hint">
-      {$tr(gaps ? "calibration.grey.what.labels" : "calibration.grey.what")}
-      {$tr("calibration.auto.paper")} <strong>{paperText}</strong>
-    </p>
-    {#if hasModel}
-      <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" role="switch" id="grey-corrected" bind:checked={corrected} />
-        <label class="form-check-label" for="grey-corrected">{$tr("calibration.grey.corrected")}</label>
+    <p class="hint">{$tr(gaps ? "calibration.grey.what.labels" : "calibration.grey.what")}</p>
+    {#if gaps && sizeOptions.length > 0}
+      <div class="sizes" role="group" aria-label={$tr("calibration.size")}>
+        <span class="sizes-title">{$tr("calibration.size")}</span>
+        {#each sizeOptions as o (`${o.width}x${o.height}`)}
+          {@const on = o.width === size.width && o.height === size.height}
+          <button class="btn btn-sm {on ? 'btn-primary' : 'btn-outline-secondary'}" aria-pressed={on} onclick={() => (size = { width: o.width, height: o.height })}>
+            {sizeText(o)} mm
+          </button>
+        {/each}
       </div>
-      <p class="hint">{$tr("calibration.grey.corrected.hint")}</p>
-    {:else}
-      <p class="hint">{$tr("calibration.grey.no_model")}</p>
+    {:else if !gaps}
+      <p class="hint">{$tr("calibration.roll")} <strong>{rollText}</strong></p>
     {/if}
-    <button class="btn btn-secondary w-100" disabled={busy !== undefined} onclick={printGreyTest}>
-      {#if busy === "grey"}
-        <span class="spinner-border spinner-border-sm"></span>
-      {:else}
-        <MdIcon icon="gradient" />
+
+    <div class="print-choice">
+      <div class="choice">
+        <DotPatch mode={patchMode} />
+        <div class="choice-title">{$tr("calibration.grey.plain")}</div>
+        <div class="choice-hint">{$tr("calibration.grey.plain.hint")}</div>
+        {#if connected}
+          <button class="btn btn-primary w-100" disabled={busy !== undefined} onclick={() => printGreyTest(false)}>
+            {#if busy === "grey"}<span class="spinner-border spinner-border-sm"></span>{:else}<MdIcon icon="print" />{/if}
+            {$tr("calibration.grey.print_plain")}
+          </button>
+        {/if}
+      </div>
+      {#if activeModel}
+        <div class="choice">
+          <DotPatch mode={patchMode} curve={patchCurve} />
+          <div class="choice-title">{$tr("calibration.grey.with")}</div>
+          <div class="choice-hint">
+            {activeSaved ? $tr("calibration.grey.with.own") : $tr("calibration.grey.with.builtin")}
+          </div>
+          {#if connected}
+            <button class="btn btn-secondary w-100" disabled={busy !== undefined} onclick={() => printGreyTest(true)}>
+              {#if busy === "corrected"}<span class="spinner-border spinner-border-sm"></span>{:else}<MdIcon icon="print" />{/if}
+              {$tr("calibration.grey.print_with")}
+            </button>
+          {/if}
+        </div>
       {/if}
-      {$tr("preview.grey.print")}
-    </button>
+    </div>
+    <p class="hint mt-2 mb-0">{$tr("calibration.grey.patches")} {patchMode.name}.</p>
+    {#if !connected}
+      <button class="btn btn-primary w-100 mt-2" onclick={connect}>
+        <MdIcon icon="bluetooth" />
+        {$tr("calibration.connect")}
+      </button>
+    {/if}
   </div>
 
   <div class="step">
@@ -306,22 +417,28 @@
       </p>
       {#if photoResult.uneven}<p class="message">{$tr("calibration.auto.uneven")}</p>{/if}
       {#if photoResult.fit.rms > 0.07}<p class="message">{$tr("calibration.auto.poor")}</p>{/if}
-      <button class="btn btn-primary w-100" onclick={useMeasured}>
-        <MdIcon icon="check" />
-        {$tr("calibration.auto.use")}
-      </button>
-    {:else if !hasOwnModel}
+      <p class="hint">{$tr("calibration.result.compare")}</p>
+      <div class="result-actions">
+        <button class="btn btn-primary" onclick={() => keepMeasured(true)}>
+          <MdIcon icon="check" />
+          {$tr("calibration.auto.use")}
+        </button>
+        <button class="btn btn-secondary" onclick={() => keepMeasured(false)}>
+          <MdIcon icon="bookmark_add" />
+          {$tr("calibration.auto.keep")}
+        </button>
+      </div>
+    {:else}
       <p class="hint mb-0">{$tr("calibration.result.empty")}</p>
-    {/if}
-    {#if hasOwnModel}
-      <p class="hint" class:mt-3={photoResult !== undefined}>{$tr("calibration.auto.own")}</p>
-      <button class="btn btn-secondary w-100" onclick={dropMeasured}>
-        <MdIcon icon="restart_alt" />
-        {$tr("calibration.auto.reset")}
-      </button>
     {/if}
   </div>
 </section>
+
+<CorrectionsSection
+  {printer}
+  bind:modeIndex
+  bind:picked
+  pending={photoResult ? { model: photoResult.fit.model, rms: photoResult.fit.rms, measured: photoResult.measured } : undefined} />
 
 {#if gaps}
   <section class="block">
@@ -344,14 +461,21 @@
         {$tr("calibration.offset.strip")}
         <strong>{plan.map((v) => formatMm(v)).join(" · ")} mm</strong>
       </p>
-      <button class="btn btn-secondary w-100" disabled={busy !== undefined} onclick={printOffsetStrip}>
-        {#if busy === "offset"}
-          <span class="spinner-border spinner-border-sm"></span>
-        {:else}
-          <MdIcon icon="print" />
-        {/if}
-        {$tr("preview.calibration.print")}
-      </button>
+      {#if connected}
+        <button class="btn btn-secondary w-100" disabled={busy !== undefined} onclick={printOffsetStrip}>
+          {#if busy === "offset"}
+            <span class="spinner-border spinner-border-sm"></span>
+          {:else}
+            <MdIcon icon="print" />
+          {/if}
+          {$tr("preview.calibration.print")}
+        </button>
+      {:else}
+        <button class="btn btn-secondary w-100" onclick={connect}>
+          <MdIcon icon="bluetooth" />
+          {$tr("calibration.connect")}
+        </button>
+      {/if}
     </div>
 
     <div class="step">
@@ -447,12 +571,59 @@
     margin: 0 0 0.5rem;
   }
 
-  .form-switch {
-    min-height: 2.75rem;
+  .sizes {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    gap: 0.25rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .sizes-title {
+    font-size: 0.875rem;
+    margin-right: 0.25rem;
+  }
+
+  .sizes .btn {
+    min-width: 4.5rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Without and with correction side by side, each with the dots it sends and its print button */
+  .print-choice {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .choice {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .choice-title {
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+  }
+
+  .choice-hint {
+    flex: 1;
+    font-size: 0.75rem;
+    color: var(--ink-secondary);
+    margin-bottom: 0.25rem;
+  }
+
+  .choice .btn {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+  }
+
+  .result-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 0.5rem;
-    margin-bottom: 0;
   }
 
   .btn {

@@ -108,6 +108,50 @@ export const withPrintStartMargin = (props: LabelProps): LabelProps => {
   };
 };
 
+/** Old presets may be in px or use another dot density; the D11s is always 8 dots/mm */
+export const presetDots = (preset: LabelPreset, value: number): number =>
+  preset.unit === "mm" ? value * DOTS_PER_MM : value;
+
+/**
+ * Build label props for a paper size in dots. The printhead covers the middle `printheadDots` of the
+ * label, so the design area is the paper clamped to that (rounded down to whole bytes), and it starts
+ * printing a little after the front edge.
+ */
+export const labelPropsForPreset = (preset: LabelPreset, printheadDots: number): LabelProps => {
+  const paperW = Math.max(DOTS_PER_MM, Math.round(presetDots(preset, preset.width)));
+  const paperH = Math.max(DOTS_PER_MM, Math.round(presetDots(preset, preset.height)));
+
+  let sizeW = paperW;
+  let sizeH = paperH;
+  if (preset.printDirection === "left") {
+    sizeH = Math.min(paperH, printheadDots);
+    sizeH = Math.max(8, sizeH - (sizeH % 8));
+  } else {
+    sizeW = Math.min(paperW, printheadDots);
+    sizeW = Math.max(8, sizeW - (sizeW % 8));
+  }
+
+  const props: LabelProps = {
+    printer: printerOf(preset),
+    printDirection: preset.printDirection,
+    size: { width: sizeW, height: sizeH },
+    shape: preset.shape ?? "rect",
+    split: preset.split ?? "none",
+    splitParts: preset.splitParts ?? 2,
+    tailPos: preset.tailPos ?? "right",
+    tailLength: Math.floor(presetDots(preset, preset.tailLength ?? 0)),
+    mirror: preset.mirror ?? "none",
+  };
+  if (preset.printer === undefined) delete props.printer;
+  if (preset.autoLength) props.autoLength = true;
+
+  if (paperW !== sizeW || paperH !== sizeH) {
+    props.paper = { width: paperW, height: paperH };
+  }
+
+  return withPrintStartMargin(props);
+};
+
 /** Default canvas dimensions: a 40×14 mm label */
 export const DEFAULT_LABEL_PROPS: LabelProps = {
   printDirection: "left",

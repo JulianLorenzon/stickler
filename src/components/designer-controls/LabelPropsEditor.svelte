@@ -13,7 +13,7 @@
   } from "$/types";
   import { connectionState, designPrinter, printerMeta } from "$/stores";
   import { tr } from "$/utils/i18n";
-  import { DOTS_PER_MM, MXW01_AUTO_LENGTH, ROLLS, printerOf, withPrintStartMargin } from "$/defaults";
+  import { DOTS_PER_MM, MXW01_AUTO_LENGTH, ROLLS, labelPropsForPreset, presetDots, printerOf } from "$/defaults";
   import { onMount } from "svelte";
   import { LocalStoragePersistence } from "$/utils/persistence";
   import { DRIVERS, driverById, type PrintDirection } from "$/lib/printer";
@@ -76,10 +76,6 @@
   const printheadDots = (): number => driverById(printer).raster.printheadPx;
   const mm = (dots: number): number => Math.round((dots / DOTS_PER_MM) * 10) / 10;
 
-  /** Old presets may be in px or use another dot density; the D11s is always 8 dots/mm */
-  const presetDots = (preset: LabelPreset, value: number): number =>
-    preset.unit === "mm" ? value * DOTS_PER_MM : value;
-
   /** The physical label, not the printable area */
   const paperDots = (props: LabelProps) => props.paper ?? props.size;
 
@@ -116,46 +112,7 @@
   let customAcross = $derived<number>(printDirection === "left" ? height : width);
   let printableMm = $derived<number>(mm(printheadDots()));
 
-  /**
-   * Build label props for a paper size in dots. The printhead covers the middle `printheadDots` of the
-   * label, so the design area is the paper clamped to that (rounded down to whole bytes), and it starts
-   * printing a little after the front edge.
-   */
-  const makeLabelProps = (preset: LabelPreset): LabelProps => {
-    const paperW = Math.max(DOTS_PER_MM, Math.round(presetDots(preset, preset.width)));
-    const paperH = Math.max(DOTS_PER_MM, Math.round(presetDots(preset, preset.height)));
-    const head = printheadDots();
-
-    let sizeW = paperW;
-    let sizeH = paperH;
-    if (preset.printDirection === "left") {
-      sizeH = Math.min(paperH, head);
-      sizeH = Math.max(8, sizeH - (sizeH % 8));
-    } else {
-      sizeW = Math.min(paperW, head);
-      sizeW = Math.max(8, sizeW - (sizeW % 8));
-    }
-
-    const props: LabelProps = {
-      printer: printerOf(preset),
-      printDirection: preset.printDirection,
-      size: { width: sizeW, height: sizeH },
-      shape: preset.shape ?? "rect",
-      split: preset.split ?? "none",
-      splitParts: preset.splitParts ?? 2,
-      tailPos: preset.tailPos ?? "right",
-      tailLength: Math.floor(presetDots(preset, preset.tailLength ?? 0)),
-      mirror: preset.mirror ?? "none",
-    };
-    if (preset.printer === undefined) delete props.printer;
-    if (preset.autoLength) props.autoLength = true;
-
-    if (paperW !== sizeW || paperH !== sizeH) {
-      props.paper = { width: paperW, height: paperH };
-    }
-
-    return withPrintStartMargin(props);
-  };
+  const makeLabelProps = (preset: LabelPreset): LabelProps => labelPropsForPreset(preset, printheadDots());
 
   const isActive = (preset: LabelPreset): boolean => {
     const target = makeLabelProps(preset);
