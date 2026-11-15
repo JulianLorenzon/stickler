@@ -80,14 +80,17 @@ const waitFrame = (io: DriverIO, cmd: number, timeout: number) => {
 interface Status {
   ok: boolean;
   battery?: number;
+  /** Print head temperature in degrees C */
+  headTempC?: number;
   error?: string;
 }
 
-/** Status payload: [3] battery, [6] 0 = OK, [7] error code (byte indices of the payload) */
+/** Status payload: [3] battery, [4] head temperature in C, [6] 0 = OK, [7] error code (byte indices of the payload) */
 const parseStatus = (p: Uint8Array | null): Status => {
   if (!p || p.length < 7) return { ok: false, error: "No answer from the printer" };
   const battery = p[3];
-  if (p[6] === 0) return { ok: true, battery };
+  const headTempC = p[4];
+  if (p[6] === 0) return { ok: true, battery, headTempC };
   const code = p[7];
   const error =
     code === 1 || code === 9
@@ -97,7 +100,7 @@ const parseStatus = (p: Uint8Array | null): Status => {
         : code === 8
           ? "Battery too low"
           : `Printer error ${code ?? "?"}`;
-  return { ok: false, battery, error };
+  return { ok: false, battery, headTempC, error };
 };
 
 class Mxw01PrintTask extends AbstractPrintTask {
@@ -171,7 +174,7 @@ export const mxw01Driver: PrinterDriver = {
   async heartbeat(io) {
     const status = parseStatus(await request(io, Cmd.Status));
     if (status.battery === undefined) return null;
-    return { chargeLevel: status.battery };
+    return { chargeLevel: status.battery, headTempC: status.headTempC };
   },
 
   meta(info) {

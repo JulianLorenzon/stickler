@@ -31,6 +31,8 @@ export interface HeartbeatData {
   chargeLevel?: number;
   charging?: boolean;
   statusByte?: number;
+  /** Print head temperature in degrees C (MXW01) */
+  headTempC?: number;
 }
 
 export interface AvailableTransports {
