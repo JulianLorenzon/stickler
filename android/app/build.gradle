@@ -26,7 +26,8 @@ android {
         debug {
             applicationIdSuffix ".dev"
             versionNameSuffix "-dev"
-            // Shrunk like the release, so what R8 breaks shows up in everyday testing. -Pnoshrink builds it
+            // Shrunk like the release, but without R8's optimisations (it skips them for debuggable builds), so it
+            // doesn't catch everything R8 breaks: test the optimized build below before a release. -Pnoshrink builds it
             // unshrunk, for readable Android-side stack traces while hunting a bug
             if (!project.hasProperty("noshrink")) {
                 minifyEnabled true
