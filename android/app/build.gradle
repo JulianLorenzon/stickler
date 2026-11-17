@@ -16,6 +16,9 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // The optimized test build shares the debug build's name ("Stickler dev")
+    sourceSets { optimized { res.srcDirs += 'src/debug/res' } }
+
     buildTypes {
         // A test build for the phone: own app ID and name ("Stickler dev"), so it installs next to the Play version
         // without replacing it; signed with the SDK's debug key, no password. Its labels are separate from the
@@ -41,6 +44,17 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // No signingConfig: the release APK comes out unsigned and tools/sign-release.sh signs it with your
             // release key, asking for the password, so the password is never stored anywhere
+        }
+        // The release build as a test build: R8's full optimisation like the release (debug skips it, being
+        // debuggable, and 1.2.1 crashed at start only in the optimised build), but "Stickler dev" next to the Play
+        // version, signed with the debug key. No WebView inspection, as in the release.
+        // Build: tools/android-build/run.sh dev optimized
+        optimized {
+            initWith release
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
         }
     }
 }

@@ -19,3 +19,12 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Capacitor reads its annotations (@CapacitorPlugin with its permissions, @PluginMethod, ...) by reflection only, so
+# R8's full optimisation concluded no instance of them could exist and dropped PluginHandle's
+# `this.pluginAnnotation = pluginAnnotation`: getPluginAnnotation() returned null and the Bluetooth plugin crashed the
+# app at start in requestPermissionForAliases (1.2.1, the first optimised release). Test builds didn't show it because
+# being debuggable they skip those optimisations
+-keep @interface com.getcapacitor.annotation.** { *; }
+-keep @interface com.getcapacitor.NativePlugin { *; }
+-keep @interface com.getcapacitor.PluginMethod { *; }

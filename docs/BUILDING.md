@@ -85,7 +85,9 @@ password). The result is `android/app/build/outputs/bundle/release/stickler-<ver
 instead. A debug build and a release build can't update each other, because they're signed with different keys.
 
 Release builds are shrunk with R8 (code shrinking), and so are debug builds, so what shrinking breaks shows up while
-testing. `./gradlew assembleDebug -Pnoshrink` builds an unshrunk debug app, for readable stack traces on the Android
+testing. Debug builds skip R8's optimisations, though, being debuggable, and those can break things too (1.2.1
+crashed at start). `./gradlew assembleOptimized` builds the release as a test app: optimised like the release, but
+Stickler dev, signed with the debug key; try it on a phone before every release. `./gradlew assembleDebug -Pnoshrink` builds an unshrunk debug app, for readable stack traces on the Android
 side; R8's mapping file for a shrunk build is `app/build/outputs/mapping/debug/mapping.txt` (read traces with the SDK's
 `retrace`).
 
@@ -100,6 +102,7 @@ tools/android-build/run.sh                              # unsigned release APK a
 tools/android-build/run.sh check                        # type check (svelte-check)
 tools/android-build/run.sh dev                          # test build "Stickler dev" next to the Play version, shrunk like the release
                                                         # (dev noshrink: unshrunk), copied to $DEV_APK_DIR (WSL: Windows Downloads)
+                                                        # dev optimized: optimised like the release (test this before releasing)
 tools/android-build/run.sh sign path/to/release.jks     # sign the APK; apksigner asks for the password
 tools/android-build/run.sh sign-bundle path/to/release.jks <alias>   # sign the app bundle; jarsigner asks for the password
 tools/android-build/run.sh sh -c 'cd android && ./gradlew assembleDebug'   # any other command

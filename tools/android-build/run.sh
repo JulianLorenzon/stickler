@@ -4,8 +4,10 @@
 #
 #   tools/android-build/run.sh                   unsigned release APK and app bundle: npm ci (if needed), vite build,
 #                                                cap sync, gradle
-#   tools/android-build/run.sh dev [noshrink]    test build for the phone ("Stickler dev", installs next to the Play
-#                                                version), shrunk with R8 like the release unless noshrink: vite build,
+#   tools/android-build/run.sh dev [noshrink|optimized]   test build for the phone ("Stickler dev", installs next to
+#                                                the Play version), shrunk with R8 like the release unless noshrink;
+#                                                optimized also runs R8's optimisations as the release does (the plain
+#                                                test build skips them, being debuggable): vite build,
 #                                                cap sync, assembleDebug, then copied as stickler-<version>-dev.apk to
 #                                                $DEV_APK_DIR, else to the Windows Downloads folder under WSL; elsewhere
 #                                                it stays in android/app/build. R8's mapping file (to read stack
@@ -39,9 +41,11 @@ elif [ "$1" = check ]; then
   set -- sh -c '[ -d node_modules ] || npm ci; npx svelte-check --tsconfig ./tsconfig.json --threshold error'
 elif [ "$1" = dev ]; then
   dev=1
-  shrink=""
+  shrink=""; variant=debug
   [ "$2" = noshrink ] && shrink=-Pnoshrink
-  set -- sh -c "[ -d node_modules ] || npm ci; npm run build && npx cap sync android && cd android && ./gradlew -q assembleDebug $shrink"
+  [ "$2" = optimized ] && variant=optimized
+  task=assemble$(echo $variant | sed 's/^./\U&/')
+  set -- sh -c "[ -d node_modules ] || npm ci; npm run build && npx cap sync android && cd android && ./gradlew -q $task $shrink"
 elif [ $# -eq 0 ]; then
   set -- sh -c '[ -d node_modules ] || npm ci; npm run build && npx cap sync android && cd android && ./gradlew assembleRelease bundleRelease'
 fi
@@ -57,7 +61,7 @@ fi
 docker run --rm $opts -e COMMIT_HASH="$COMMIT_HASH" --user "$(id -u):$(id -g)" -v stickler-build-cache:/cache -v "$root:$root" -w "$root" $img "$@"
 
 if [ -n "$dev" ]; then
-  apk=$root/android/app/build/outputs/apk/debug/app-debug.apk
+  apk=$root/android/app/build/outputs/apk/$variant/app-$variant.apk
   version=$(sed -n 's/^ *versionName "\(.*\)"/\1/p' "$root/android/app/build.gradle")
   dir=$DEV_APK_DIR
   if [ -z "$dir" ] && grep -qi microsoft /proc/version 2>/dev/null; then
@@ -65,7 +69,7 @@ if [ -n "$dev" ]; then
     home=$(cd /mnt/c && cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
     [ -n "$home" ] && dir=$(wslpath "$home")/Downloads
   fi
-  mapping=$root/android/app/build/outputs/mapping/debug/mapping.txt
+  mapping=$root/android/app/build/outputs/mapping/$variant/mapping.txt
   if [ -z "$shrink" ] && [ -f "$mapping" ]; then
     mkdir -p "$root/android/app/build/dev"
     cp "$mapping" "$root/android/app/build/dev/mapping-$COMMIT_HASH.txt"
