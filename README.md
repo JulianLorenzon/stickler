@@ -40,7 +40,8 @@ How to use each feature: [docs/GUIDE.md](docs/GUIDE.md), also on
 
 ## Get it
 
-Stickler runs on Android 6.0 or newer and is on its way to Google Play; see
+Stickler is free on [Google Play](https://play.google.com/store/apps/details?id=com.julianlorenzon.stickler) for
+Android 6.0 or newer, in the EU, Switzerland and Argentina; see also
 [stickler.julianlorenzon.com](https://stickler.julianlorenzon.com/). To build it yourself, see
 [docs/BUILDING.md](docs/BUILDING.md).
 
